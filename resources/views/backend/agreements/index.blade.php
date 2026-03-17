@@ -32,8 +32,12 @@
                                     <tbody>
                                     @forelse($agreements as $agreement)
                                         <tr>
-                                            <td>{{ $agreement->company->name }}</td>
-                                            <td>{{ $agreement->driver->full_name }}</td>
+                                            <td>{{ $agreement->company->name  }}</td>
+                                            <td>
+                                                <strong>{{ $agreement->driver->full_name }}</strong>
+                                                <br>
+                                                <span>Post Code: {{ $agreement->driver->post_code }}</span>
+                                                <br>
                                             <td>{{ $agreement->car->registration }}</td>
                                             <td>{{ $agreement->start_date->format('M d, Y') }}</td>
                                             <td>{{ $agreement->end_date->format('M d, Y') }}</td>

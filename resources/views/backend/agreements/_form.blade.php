@@ -10,6 +10,24 @@
         <div class="row">
             <div class="col-md-6">
                 <div class="mb-3">
+                    <label for="car_id" class="form-label">Vehicle *</label>
+                    <select name="car_id" id="car_id" class="form-control @error('car_id') is-invalid @enderror" required>
+                        <option value="">Select Vehicle</option>
+                        @foreach($cars as $car)
+                            <option value="{{ $car->id }}"
+                                    data-company-id="{{ $car->company_id }}"
+                                {{ (old('car_id') ?? (isset($model) ? $model->car_id : '')) == $car->id ? 'selected' : '' }}>
+                                {{ $car->registration }} - {{ $car->carModel->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('car_id')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
                     <label for="company_id" class="form-label">Company *</label>
                     <select name="company_id" id="company_id" class="form-control @error('company_id') is-invalid @enderror" required>
                         <option value="">Select Company</option>
@@ -37,23 +55,6 @@
                         @endforeach
                     </select>
                     @error('driver_id')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label for="car_id" class="form-label">Vehicle *</label>
-                    <select name="car_id" id="car_id" class="form-control @error('car_id') is-invalid @enderror" required>
-                        <option value="">Select Vehicle</option>
-                        @foreach($cars as $car)
-                            <option value="{{ $car->id }}" {{ (old('car_id') ?? (isset($model) ? $model->car_id : '')) == $car->id ? 'selected' : '' }}>
-                                {{ $car->registration }} - {{ $car->carModel->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('car_id')
                     <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
                 </div>
@@ -721,7 +722,7 @@
             const ownInsuranceStartDate = document.getElementById('own_insurance_start_date');
             const ownInsuranceEndDate = document.getElementById('own_insurance_end_date');
 
-            function validateDates() {
+            /*function validateDates() {
                 const startDate = startDateInput.value;
                 const endDate = endDateInput.value;
 
@@ -731,7 +732,7 @@
                     return false;
                 }
                 return true;
-            }
+            }*/
 
             function validateInsuranceDates() {
                 const startDate = ownInsuranceStartDate.value;
@@ -777,6 +778,17 @@
                     }
                 });
             });
+        });
+
+        document.getElementById('car_id').addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const companyId = selectedOption.getAttribute('data-company-id');
+
+            if (companyId) {
+                document.getElementById('company_id').value = companyId;
+                // Insurance providers bhi filter ho jayein company change hone par
+                filterInsuranceProviders();
+            }
         });
     </script>
 @endpush
