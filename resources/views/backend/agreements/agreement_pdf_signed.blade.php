@@ -189,7 +189,7 @@
 <div class="header">
     <div class="company-name">{{ $company->name ?? 'SAMORE TRADERS LTD' }}</div>
     <br>
-    <div class="company-email">{{ $company->email ?? 'samoretradersltd@gmail.com' }}</div>
+    {{--<div class="company-email">{{ $company->email ?? 'samoretradersltd@gmail.com' }}</div>--}}
 </div>
 
 <!-- Details Section - Two Columns -->
@@ -416,6 +416,249 @@
     <strong>Electronically Signed Document</strong><br>
     Agreement ID: {{ $agreement->id }} | Signed on: {{ now()->format('d/m/Y H:i:s') }}<br>
     This is a legally binding electronic signature
+</div>
+
+{{-- ===== PAGE BREAK - Statement of Understanding (SIGNED) ===== --}}
+<div style="page-break-before: always; padding: 20px;">
+
+    <div style="border-top: 3px solid #000; border-bottom: 3px solid #000; text-align: center; font-weight: bold; font-size: 14px; padding: 10px; margin-bottom: 20px; text-decoration: underline;">
+        STATEMENT OF UNDERSTANDING
+    </div>
+
+    {{-- EXCESS FEE --}}
+    <div style="margin-bottom: 15px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">EXCESS FEE:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I HEREBY ACKNOWLEDGE AND AGREE THAT IN THE EVENT OF A MOTOR ACCIDENT, I AM RESPONSIBLE FOR PAYING THE
+            APPLICABLE INSURANCE EXCESS FEE IN ORDER TO PROCEED WITH THE CLAIM PROCESS. IF, UPON CONCLUSION OF THE
+            INVESTIGATION, THE ACCIDENT IS DETERMINED TO BE NON-FAULT, THE EXCESS FEE PAID BY ME SHALL BE REIMBURSED
+            IN FULL. HOWEVER, IF THE OUTCOME OF THE CLAIM ESTABLISHES THAT I AM AT FAULT, I ACKNOWLEDGE THAT I SHALL
+            HAVE NO RIGHT OR ENTITLEMENT TO RECOVER OR REQUEST REIMBURSEMENT OF THE EXCESS FEE, AS IT WILL BE DEEMED
+            DULY PAYABLE. FURTHERMORE, I UNDERSTAND AND AGREE THAT IN CASES WHERE THE ACCIDENT INVOLVES AN UNINSURED
+            THIRD PARTY, A STOLEN VEHICLE, OR IF THE VEHICLE I AM DRIVING IS STOLEN, I SHALL BE LIABLE TO PAY THE
+            FULL EXCESS AMOUNT REGARDLESS OF FAULT, AS SUCH CIRCUMSTANCES MAY PREVENT RECOVERY OF COSTS FROM THE
+            THIRD PARTY.
+        </p>
+    </div>
+
+    {{-- TYRES & HEADLIGHT BULB --}}
+    <div style="margin-bottom: 15px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">TYRES & HEADLIGHT BULB:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I ACKNOWLEDGE THAT UPON RENTING OUT CAR I WILL CHECK AND AGREE TO THE CONDITION OF TYRES AND BULBS.
+            ONCE TAKEN THE CAR, IT WILL BECOME MY RESPONSIBILITY TO CHANGE THE TYRES AND BULBS.
+        </p>
+    </div>
+
+    {{-- CAR WASH --}}
+    <div style="margin-bottom: 15px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">CAR WASH:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I ACKNOWLEDGE THAT UPON RETURNING THE CAR BACK, I WILL MAKE SURE TO RETURN THE CAR WASHED AND VACUUMED
+            AND IN IMMACULATE CONDITION OTHERWISE THE COMPANY RESERVE THE RIGHT TO CHARGE ME £30 POUNDS.
+        </p>
+    </div>
+
+    {{-- NOTICE --}}
+    <div style="margin-bottom: 15px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">NOTICE:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I ACKNOWLEDGE THAT I AM BOUND TO GIVE ONE WEEK'S NOTICE AFTER MY MINIMUM CONTRACTUAL TERM HAS FINISHED
+            IN ORDER TO RETURN THE VEHICLE. I FURTHER ACKNOWLEDGE THAT THIS NOTICE MUST BE GIVEN ON THE DUE DATE OF
+            MY RENT PAYMENT; FAILURE TO DO SO WILL RESULT IN THE FORFEITURE OF MY DEPOSIT FOR CLOSING WITHOUT NOTICE.
+            I ALSO UNDERSTAND AND ACCEPT THAT VEHICLE RENTALS ARE CHARGED ON A WEEKLY BASIS, NOT DAILY, AND ANY
+            CLOSURE WILL BE CHARGED AS A FULL WEEK, REGARDLESS OF THE NUMBER OF DAYS REMAINING.
+        </p>
+    </div>
+
+    {{-- MOT AND PLATES --}}
+    <div style="margin-bottom: 15px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">MOT AND PLATES APPOINTMENT:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I ACKNOWLEDGE THAT WHENEVER THE VEHICLE REQUIRED MOT OR COUNCIL APPOINTMENT FOR RENEWAL OF PLATES,
+            I AM BOUND TO BRING THE VEHICLE ON THE APPOINTMENT TIME TO THE OFFICE.
+        </p>
+    </div>
+
+    {{-- DRIVING LICENCE CHANGES --}}
+    <div style="margin-bottom: 20px;">
+        <p style="font-weight: bold; margin-bottom: 5px;">DRIVING LICENCE CHANGES OR CONVICTIONS:</p>
+        <p style="text-align: justify; margin-left: 20px;">
+            I ACKNOWLEDGE THAT I AM <strong>OBLIGED TO IMMEDIATELY INFORM THE COMPANY</strong> OF ANY <strong>CHANGES</strong>
+            TO MY DRIVING LICENCE STATUS, INCLUDING BUT NOT LIMITED TO:
+        </p>
+        <ul style="margin-left: 40px; text-align: justify;">
+            <li style="margin-bottom: 5px;">
+                <strong>ENDORSEMENTS, PENALTY POINTS, DISQUALIFICATIONS, OR DRIVING CONVICTIONS</strong> OF ANY KIND.
+            </li>
+            <li style="margin-bottom: 5px;">
+                <strong>SUSPENSION, REVOCATION, OR RESTRICTION</strong> OF MY DRIVING LICENCE.
+                FAILURE TO NOTIFY THE COMPANY OF SUCH CHANGES WILL RESULT IN
+                <strong>IMMEDIATE TERMINATION OF THIS AGREEMENT AND THE RENTAL CONTRACT</strong>,
+                AND I MAY BE REQUIRED TO <strong>RETURN THE VEHICLE WITHOUT NOTICE</strong>.
+            </li>
+        </ul>
+    </div>
+
+    {{-- SOU - Driver Details Fields (Filled) --}}
+    <div style="margin-top: 20px; border-top: 1px solid #000; padding-top: 15px;">
+        <table style="width: 100%; font-size: 11px;">
+            <tr>
+                <td style="width: 50%; padding: 5px 10px 5px 0;">
+                    <strong>CAR REG:</strong>
+                    <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 150px; padding-bottom: 2px;">
+                        {{ $car->registration }}
+                    </span>
+                </td>
+                <td style="width: 50%; padding: 5px 0 5px 10px;">
+                    <strong>NAME: MR</strong>
+                    <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 150px; padding-bottom: 2px;">
+                        {{ $driver->full_name }}
+                    </span>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 10px 5px 0;">
+                    <strong>DRIVING LICENCE:</strong>
+                    <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 130px; padding-bottom: 2px;">
+                        {{ $driver->driver_license_number ?? '' }}
+                    </span>
+                </td>
+                <td style="padding: 8px 0 5px 10px;">
+                    <strong>N.I NUMBER:</strong>
+                    <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 150px; padding-bottom: 2px;">
+                        {{ $driver->ni_number ?? '' }}
+                    </span>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" style="padding: 8px 0 5px 0;">
+                    <strong>EMAIL:</strong>
+                    <span style="border-bottom: 1px solid #000; display: inline-block; min-width: 250px; padding-bottom: 2px;">
+                        {{ $driver->email ?? '' }}
+                    </span>
+                </td>
+            </tr>
+        </table>
+
+        {{-- ✅ SOU - ACTUAL SIGNATURE (same signature_image use hogi) --}}
+        <div style="margin-top: 25px; display: table; width: 100%;">
+            <div style="display: table-cell; width: 60%; padding-right: 20px;">
+                <strong>SIGN:</strong>
+                <div style="position: relative; display: inline-block; width: 70%;">
+                    @if(isset($signature_image) && $signature_image)
+                        <img src="{{ $signature_image }}"
+                             style="max-width: 100%; max-height: 40px; display: block; margin-bottom: 0;"
+                             alt="Signature">
+                    @endif
+                    <div style="border-bottom: 1px solid #000; width: 100%;"></div>
+                    @if(isset($signature_image) && $signature_image)
+                        <div style="font-size: 8px; color: #666; margin-top: 2px;">
+                            {{ $driver->full_name }} | {{ now()->format('d/m/Y H:i') }}
+                        </div>
+                    @endif
+                </div>
+            </div>
+            <div style="display: table-cell; width: 40%;">
+                <strong>DATE:</strong>
+                <div style="position: relative; display: inline-block; width: 70%;">
+                    <div style="padding-bottom: 2px; font-size: 11px;">
+                        @if(isset($signature_image) && $signature_image)
+                            {{ now()->format('d/m/Y') }}
+                        @endif
+                    </div>
+                    <div style="border-bottom: 1px solid #000; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 8px;">
+        <strong>Electronically Signed Document</strong> |
+        Agreement ID: {{ $agreement->id }} | Statement of Understanding |
+        Signed: {{ now()->format('d/m/Y H:i:s') }}
+    </div>
+</div>
+
+{{-- ===== PAGE BREAK - Statement of Liability (SIGNED) ===== --}}
+<div style="page-break-before: always; padding: 20px;">
+
+    <div style="border-top: 3px solid #000; border-bottom: 3px solid #000; text-align: center; font-weight: bold; font-size: 14px; padding: 10px; margin-bottom: 20px;">
+        STATEMENT OF LIABILITY
+    </div>
+
+    <p style="text-align: justify; margin-bottom: 20px;">
+        I ACCEPT THAT ANY MOTORING OR TRAFFIC OFFENCES, TOLL CHARGES, CONGESTION CHARGES, PENALTIES, ANY PARKING
+        CHARGES, BUS LANE CONTRAVENTION AND FINE ARISING IN RELATION TO THE VEHICLE FOR THE DURATION OF THE LOAN
+        ARE MY SOLE RESPONSIBILITY UNDER THE ROAD TRAFFIC REGULATION ACT 1984, THE ROAD TRAFFIC OFFENDER ACT 1988,
+        AND/OR ANY SUBSEQUENT RELEVANT LEGISLATION.
+    </p>
+
+    <p style="text-align: justify; margin-bottom: 25px;">
+        ANY BREAKDOWN SERVICE IS REQUIRED ON VEHICLE IS DRIVER RESPONSIBILITY.
+    </p>
+
+    <p style="font-weight: bold; margin-bottom: 15px;">DETAILS ARE AS FOLLOW:</p>
+
+    {{-- SOL - Details Fields (Filled) --}}
+    <table style="width: 100%; font-size: 11px; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; width: 35%;"><strong>HIRER NAME: MR</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">{{ $driver->full_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0;"><strong>HIRER ADDRESS:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">
+                {{ $driver->address1 ?? '' }}{{ isset($driver->address2) && $driver->address2 ? ', ' . $driver->address2 : '' }}
+                {{ isset($driver->post_code) ? ' ' . $driver->post_code : '' }}
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0;"><strong>MAKE AND MODEL:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">{{ $car->carModel->name ?? '' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0;"><strong>VEHICLE REGISTRATION:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">{{ $car->registration }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0;"><strong>DATE/TIME OUT:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">{{ $agreement->start_date->format('d/m/Y H:i') }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0;"><strong>DATE/TIME DUE:</strong></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #000;">{{ $agreement->end_date->format('d/m/Y H:i') }}</td>
+        </tr>
+    </table>
+
+    {{-- SOL - Consent Statement --}}
+    <p style="margin-top: 25px; font-weight: bold; text-align: center;">
+        I HAVE READ AND HAPPY TO SIGN FOR THIS STATEMENT OF LIABILITY.
+    </p>
+
+    {{-- ✅ SOL - ACTUAL SIGNATURE --}}
+    <div style="text-align: center; margin-top: 30px;">
+        <div style="display: inline-block; width: 45%; text-align: center;">
+            @if(isset($signature_image) && $signature_image)
+                <img src="{{ $signature_image }}"
+                     style="max-width: 90%; max-height: 45px; display: block; margin: 0 auto;"
+                     alt="Client Signature">
+            @endif
+            <div style="border-bottom: 1px solid #000; width: 100%; margin-bottom: 5px;"></div>
+            <strong>CLIENT SIGNATURE</strong>
+            @if(isset($signature_image) && $signature_image)
+                <div style="font-size: 8px; color: #666; margin-top: 3px;">
+                    {{ $driver->full_name }} | {{ now()->format('d/m/Y H:i') }}
+                </div>
+            @endif
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 8px;">
+        <strong>Electronically Signed Document</strong> |
+        Agreement ID: {{ $agreement->id }} | Statement of Liability |
+        Signed: {{ now()->format('d/m/Y H:i:s') }}
+    </div>
 </div>
 </body>
 </html>

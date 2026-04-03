@@ -58,19 +58,72 @@ class CustomSigningService
      */
     protected function sendSigningEmail(Agreement $agreement, $token, $signingUrl)
     {
-        $data = [
-            'agreement' => $agreement,
-            'driver' => $agreement->driver,
-            'company' => $agreement->company,
+        // ✅ Step 1: Agreement PDF generate karo attachment k liye
+        $pdfAttachmentPath = null;
+        try {
+            $data = [
+                'agreement' => $agreement,
+                'driver'    => $agreement->driver,
+                'car'       => $agreement->car,
+                'company'   => $agreement->company,
+                'currentDate' => \Carbon\Carbon::now()->format('d/m/Y'),
+            ];
+
+            $pdf = \PDF::loadView('backend.agreements.agreement_pdf', $data);
+            $pdf->setPaper('A4', 'portrait');
+
+            // Temp directory mein save karo
+            $tempDir = public_path('uploads/agreements/temp');
+            if (!file_exists($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+
+            $fileName = "agreement_{$agreement->id}_preview.pdf";
+            $pdfAttachmentPath = "{$tempDir}/{$fileName}";
+            $pdf->save($pdfAttachmentPath);
+
+        } catch (\Exception $e) {
+            \Log::warning('Agreement PDF attachment generate nahi ho saka: ' . $e->getMessage());
+            // PDF attach na ho to bhi email send karo — koi problem nahi
+            $pdfAttachmentPath = null;
+        }
+
+        // ✅ Step 2: Email data
+        $emailData = [
+            'agreement'  => $agreement,
+            'driver'     => $agreement->driver,
+            'company'    => $agreement->company,
             'signing_url' => $signingUrl,
-            'expires_at' => $token->expires_at->format('M d, Y h:i A')
+            'expires_at' => $token->expires_at->format('M d, Y h:i A'),
+            'has_attachment' => ($pdfAttachmentPath && file_exists($pdfAttachmentPath)),
         ];
 
-        Mail::send('emails.custom_signing_request', $data, function ($message) use ($agreement) {
-            $message->to($agreement->driver->email)
-                ->cc(auth()->user()->email)
-                ->subject('Sign Your Vehicle Hire Agreement - ' . $agreement->car->registration);
-        });
+        // ✅ Step 3: Email send karo + PDF attach karo
+        Mail::send(
+            'emails.custom_signing_request',
+            $emailData,
+            function ($message) use ($agreement, $pdfAttachmentPath) {
+                $message->to($agreement->driver->email)
+                    ->subject('Sign Your Vehicle Hire Agreement - ' . $agreement->car->registration);
+
+                // ✅ PDF attach karo agar successfully generate hui ho
+                if ($pdfAttachmentPath && file_exists($pdfAttachmentPath)) {
+                    $message->attach($pdfAttachmentPath, [
+                        'as'   => 'Vehicle_Hire_Agreement_' . $agreement->car->registration . '.pdf',
+                        'mime' => 'application/pdf',
+                    ]);
+                }
+            }
+        );
+
+        // ✅ Step 4: Temp PDF delete karo email send hone k baad
+        if ($pdfAttachmentPath && file_exists($pdfAttachmentPath)) {
+            try {
+                unlink($pdfAttachmentPath);
+            } catch (\Exception $e) {
+                \Log::warning('Temp PDF delete nahi ho saka: ' . $e->getMessage());
+            }
+        }
     }
 
     /**

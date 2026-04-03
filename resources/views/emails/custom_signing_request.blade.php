@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -81,6 +81,23 @@
             margin: 20px 0;
             color: #856404;
         }
+
+        {{-- ✅ NEW: Attachment notice styling --}}
+        .attachment-notice {
+            background-color: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-left: 4px solid #4caf50;
+            padding: 15px 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            color: #2e7d32;
+        }
+        .attachment-notice strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 15px;
+        }
+
         .footer {
             text-align: center;
             color: #666;
@@ -132,7 +149,16 @@
             </div>
         </div>
 
-        <p style="margin-top: 25px;"><strong>To review and sign this agreement, please click the button below:</strong></p>
+        {{-- ✅ NEW: Attachment notice - driver ko pata chale PDF attached hai --}}
+        @if(isset($has_attachment) && $has_attachment)
+            <div class="attachment-notice">
+                <strong>📎 Agreement Document Attached</strong>
+                Please review the attached PDF <strong>(Vehicle_Hire_Agreement_{{ $agreement->car->registration }}.pdf)</strong>
+                carefully before signing. It contains the full terms and conditions of your hire agreement.
+            </div>
+        @endif
+
+        <p style="margin-top: 25px;"><strong>Once you have reviewed the agreement, click the button below to sign:</strong></p>
 
         <div style="text-align: center;">
             <a href="{{ $signing_url }}" class="button">
