@@ -67,6 +67,10 @@
                                 </span>
                                 </p>
                             </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Seller Name:</strong>
+                                <p class="mb-0">{{ $car->seller_name ?? '—' }}</p>
+                            </div>
                             @if($car->v5_document)
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>

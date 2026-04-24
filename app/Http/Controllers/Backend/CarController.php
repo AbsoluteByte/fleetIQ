@@ -97,6 +97,7 @@ class CarController extends Controller
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
+            'seller_name' => 'required|string|max:255',
 
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
@@ -272,6 +273,7 @@ class CarController extends Controller
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
+            'seller_name' => 'required|string|max:255',
 
             'mots.*.id' => 'nullable|exists:car_mots,id',
             'mots.*.expiry_date' => 'required|date',

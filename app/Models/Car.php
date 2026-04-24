@@ -12,7 +12,8 @@ class Car extends Model
     protected $fillable = [
         'tenant_id','company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
-        'purchase_date', 'purchase_price', 'purchase_type', 'createdBy', 'updatedBy'
+        'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
+        'createdBy', 'updatedBy',
     ];
 
     protected $casts = [
