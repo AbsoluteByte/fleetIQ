@@ -86,4 +86,36 @@ class Car extends Model
         $tenant = auth()->user()->currentTenant();
         return $query->where('tenant_id', $tenant->id ?? 0);
     }
+
+    /**
+     * Counsel name from the PHV row with the latest expiry date (current or most recent).
+     */
+    public function latestPhvCounselName(): ?string
+    {
+        $phv = $this->phvs
+            ->sortByDesc(fn (CarPhv $p) => optional($p->expiry_date)->timestamp ?? 0)
+            ->first();
+
+        return $phv?->counsel?->name;
+    }
+
+    /**
+     * Insurance is shown as Active when the latest-by-expiry policy has status "Active" and is not past its expiry date.
+     */
+    public function isInsuranceCurrentlyActive(): bool
+    {
+        $insurance = $this->insurances
+            ->sortByDesc(fn (CarInsurance $i) => optional($i->expiry_date)->timestamp ?? 0)
+            ->first();
+
+        if (! $insurance?->status || ! $insurance->expiry_date) {
+            return false;
+        }
+
+        if (strcasecmp($insurance->status->name, 'Active') !== 0) {
+            return false;
+        }
+
+        return $insurance->expiry_date->copy()->startOfDay()->gte(now()->startOfDay());
+    }
 }

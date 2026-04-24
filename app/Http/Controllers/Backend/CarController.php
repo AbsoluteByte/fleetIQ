@@ -40,7 +40,12 @@ class CarController extends Controller
         }
 
         $cars = Car::where('tenant_id', $tenant->id)
-            ->with(['company', 'carModel'])
+            ->with([
+                'company',
+                'carModel',
+                'phvs.counsel',
+                'insurances.status',
+            ])
             ->latest()
             ->get();
 

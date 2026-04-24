@@ -22,8 +22,8 @@
                                         <th>Company</th>
                                         <th>Model</th>
                                         <th>Color</th>
-                                        <th>Purchase Date</th>
-                                        <th>Purchase Price</th>
+                                        <th>PHV Counsel</th>
+                                        <th>Insurance Status</th>
                                         <th>Actions</th>
                                     </tr>
                                     </thead>
@@ -38,8 +38,20 @@
                                             <td>
                                                 <span class="badge bg-secondary">{{ $car->color }}</span>
                                             </td>
-                                            <td>{{ $car->purchase_date->format('M d, Y') }}</td>
-                                            <td>£{{ number_format($car->purchase_price, 2) }}</td>
+                                            <td>{{ $car->latestPhvCounselName() ?? '—' }}</td>
+                                            <td>
+                                                @if($car->isInsuranceCurrentlyActive())
+                                                    <span class="text-nowrap">
+                                                        <span class="text-success" style="font-size: 1.15rem; line-height: 0; vertical-align: middle;">&bull;</span>
+                                                        <span class="ml-25">Active</span>
+                                                    </span>
+                                                @else
+                                                    <span class="text-nowrap">
+                                                        <span class="text-danger" style="font-size: 1.15rem; line-height: 0; vertical-align: middle;">&bull;</span>
+                                                        <span class="ml-25">Inactive</span>
+                                                    </span>
+                                                @endif
+                                            </td>
                                             <td>
                                                 <div class="btn-group" role="group">
                                                     <a href="{{ route('cars.show', $car) }}" class="btn btn-sm btn-outline-info">
