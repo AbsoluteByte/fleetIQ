@@ -135,10 +135,10 @@ class CarController extends Controller
                     $validated['v5_document'] = $this->uploadFile($request->file('v5_document'), 'uploads/cars');
                 }
 
-                // ✅ Add tenant_id automatically
-                $validated['tenant_id'] = $tenant->id;
-                $validated['createdBy'] = Auth::id();
-                $car = Car::create($validated);
+                $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData['tenant_id'] = $tenant->id;
+                $carData['createdBy'] = Auth::id();
+                $car = Car::create($carData);
 
                 // Store MOTs
                 if ($request->has('mots')) {
@@ -321,10 +321,10 @@ class CarController extends Controller
                     }
                 }
 
-                // ✅ Ensure tenant_id stays the same
-                $validated['tenant_id'] = $tenant->id;
-                $validated['updatedBy'] = Auth::id();
-                $car->update($validated);
+                $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData['tenant_id'] = $tenant->id;
+                $carData['updatedBy'] = Auth::id();
+                $car->update($carData);
 
                 // ... rest of your MOT, Road Tax, PHV, Insurance update code (keep as is)
                 // Your existing code is good, just continue with it
@@ -504,6 +504,26 @@ class CarController extends Controller
             return redirect()->back()
                 ->with('error', 'Error deleting car: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Only pass real car columns to create/update (not nested mots/phvs/insurance keys from validate()).
+     */
+    private function carMassAssignmentFromValidated(array $validated, Request $request): array
+    {
+        $keys = [
+            'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
+            'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
+            'purchase_type', 'seller_name',
+        ];
+
+        $data = array_intersect_key($validated, array_flip($keys));
+
+        if (! array_key_exists('seller_name', $data) && $request->has('seller_name')) {
+            $data['seller_name'] = $request->string('seller_name')->value();
+        }
+
+        return $data;
     }
 
     // ✅ Keep your existing helper methods
