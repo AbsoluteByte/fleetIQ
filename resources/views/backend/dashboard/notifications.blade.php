@@ -326,6 +326,11 @@
                         }
                     },
                     {
+                        data: 'sort_key',
+                        visible: false,
+                        searchable: false
+                    },
+                    {
                         data: null,
                         orderable: false,
                         render: function(data, type, row) {
@@ -342,7 +347,7 @@
                         }
                     }
                 ],
-                order: [[4, 'asc']], // Sort by time (expired first)
+                order: [[5, 'asc']], // Chronological expiry (server order; column is Unix timestamp)
                 pageLength: 25,
                 language: {
                     search: "_INPUT_",

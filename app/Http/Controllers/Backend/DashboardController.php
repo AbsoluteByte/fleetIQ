@@ -223,7 +223,8 @@ class DashboardController extends Controller
                 'color' => 'danger',
                 'bg_color' => 'rgba(239, 68, 68, 0.1)',
                 'border_color' => '#ef4444',
-                'created_at' => $collection->due_date
+                'created_at' => $collection->due_date,
+                'sort_key' => $collection->due_date->timestamp,
             ]);
         }
 
@@ -252,7 +253,8 @@ class DashboardController extends Controller
                 'color' => 'warning',
                 'bg_color' => 'rgba(245, 158, 11, 0.1)',
                 'border_color' => '#f59e0b',
-                'created_at' => $collection->due_date
+                'created_at' => $collection->due_date,
+                'sort_key' => $collection->due_date->timestamp,
             ]);
         }
 
@@ -282,7 +284,8 @@ class DashboardController extends Controller
                 'color' => 'info',
                 'bg_color' => 'rgba(59, 130, 246, 0.1)',
                 'border_color' => '#3b82f6',
-                'created_at' => $collection->due_date
+                'created_at' => $collection->due_date,
+                'sort_key' => $collection->due_date->timestamp,
             ]);
         }
 
@@ -329,7 +332,8 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
-                'created_at' => $policy->policy_end_date
+                'created_at' => $policy->expiry_date,
+                'sort_key' => $policy->expiry_date->timestamp,
             ]);
         }
 
@@ -377,7 +381,8 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(107, 114, 128, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
-                'created_at' => $phv->expiry_date
+                'created_at' => $phv->expiry_date,
+                'sort_key' => $phv->expiry_date->timestamp,
             ]);
         }
 
@@ -421,7 +426,8 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#f59e0b',
-                'created_at' => $mot->expiry_date
+                'created_at' => $mot->expiry_date,
+                'sort_key' => $mot->expiry_date->timestamp,
             ]);
         }
 
@@ -469,7 +475,8 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#22c55e',
-                'created_at' => $expiryDate
+                'created_at' => $expiryDate,
+                'sort_key' => $expiryDate->timestamp,
             ]);
         }
 
@@ -510,7 +517,8 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#3b82f6',
-                'created_at' => $driver->driver_license_expiry_date
+                'created_at' => $driver->driver_license_expiry_date,
+                'sort_key' => $driver->driver_license_expiry_date->timestamp,
             ]);
         }
 
@@ -552,14 +560,15 @@ class DashboardController extends Controller
                 'color' => $color,
                 'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(107, 114, 128, 0.1)',
                 'border_color' => $color == 'danger' ? '#ef4444' : '#6b7280',
-                'created_at' => $driver->phd_license_expiry_date
+                'created_at' => $driver->phd_license_expiry_date,
+                'sort_key' => $driver->phd_license_expiry_date->timestamp,
             ]);
         }
 
-        // Sort notifications
+        // Sort by actual expiry/due instant: past dates first (oldest expiry first), then future (soonest first)
         $sortedNotifications = $notifications->sortBy([
-            ['priority', 'asc'],
-            ['created_at', 'asc']
+            ['sort_key', 'asc'],
+            ['id', 'asc'],
         ]);
 
         // Generate summary counts
@@ -610,11 +619,11 @@ class DashboardController extends Controller
                 $fleetNotifications = $fleetNotifications->where('type', $request->type);
             }
 
-            // ✅ Sort by priority (expired first)
+            // ✅ Chronological by expiry/due date (expired oldest-first, then upcoming soonest-first)
             $fleetNotifications = $fleetNotifications->sortBy([
-                ['priority', 'asc'],
-                ['created_at', 'asc']
-            ]);
+                ['sort_key', 'asc'],
+                ['id', 'asc'],
+            ])->values();
 
             return datatables()->of($fleetNotifications)->toJson();
         }
@@ -641,11 +650,10 @@ class DashboardController extends Controller
                 $paymentNotifications = $paymentNotifications->where('type', $request->type);
             }
 
-            // ✅ Sort by priority (expired/overdue first)
             $paymentNotifications = $paymentNotifications->sortBy([
-                ['priority', 'asc'],
-                ['created_at', 'asc']
-            ]);
+                ['sort_key', 'asc'],
+                ['id', 'asc'],
+            ])->values();
 
             // ✅ Transform for DataTable
             $transformed = $paymentNotifications->map(function ($notification) {

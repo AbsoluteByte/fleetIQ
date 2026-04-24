@@ -2,6 +2,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use App\Models\Company;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 
@@ -38,8 +39,15 @@ class InsuranceProviderSeeder extends Seeder
             ],
         ];
 
-        foreach ($providers as $provider) {
-            InsuranceProvider::create($provider);
+        $companies = Company::query()->orderBy('id')->get();
+        if ($companies->isEmpty()) {
+            return;
+        }
+
+        foreach ($providers as $i => $provider) {
+            InsuranceProvider::create(array_merge($provider, [
+                'company_id' => $companies[$i % $companies->count()]->id,
+            ]));
         }
     }
 }

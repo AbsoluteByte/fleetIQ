@@ -31,11 +31,15 @@ class RolePermissionSeeder extends Seeder
         // Create roles
         $superUserRole = Role::create(['name' => 'superuser']);
         $adminRole = Role::create(['name' => 'admin']);
+        $managerRole = Role::create(['name' => 'manager']);
         $userRole = Role::create(['name' => 'user']);
         $driverRole = Role::create(['name' => 'driver']);
 
         // Assign permissions to roles
         $adminRole->givePermissionTo(Permission::all());
+        $managerRole->givePermissionTo(
+            Permission::whereNotIn('name', ['manage_users', 'manage_settings'])->get()
+        );
 
     }
 }
