@@ -3598,11 +3598,11 @@ div.dataTables_wrapper div.dataTables_filter input {
   min-width : 18rem !important;
   width : 22rem !important;
   max-width : 100%;
-  font-size : 20px;
-  padding : 5px;
+  font-size : 1.5rem;
+  padding : 0.3125rem;
   display : inline-block;
-  height : 40px;
-  line-height : 40px;
+  height : 3rem;
+  line-height : 3rem;
 }
 
 div.dataTables_wrapper div.dataTables_paginate ul.pagination {
