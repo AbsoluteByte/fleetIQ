@@ -210,6 +210,8 @@
                             <th>MESSAGE</th>
                             <th>VEHICLE/DRIVER</th>
                             <th>EXPIRY STATUS</th>
+                            {{-- Must match hidden sort_key column in DataTables (column count) --}}
+                            <th class="d-none"></th>
                             <th>ACTIONS</th>
                         </tr>
                         </thead>
