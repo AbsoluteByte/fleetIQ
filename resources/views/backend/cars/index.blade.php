@@ -41,14 +41,14 @@
                                             <td>{{ $car->latestPhvCounselName() ?? '—' }}</td>
                                             <td>
                                                 @if($car->isInsuranceCurrentlyActive())
-                                                    <span class="text-nowrap">
-                                                        <span class="text-success" style="font-size: 1.15rem; line-height: 0; vertical-align: middle;">&bull;</span>
-                                                        <span class="ml-25">Active</span>
+                                                    <span class="insurance-status">
+                                                        <span class="insurance-status-dot insurance-status-dot--active" aria-hidden="true"></span>
+                                                        <span class="insurance-status-label">Active</span>
                                                     </span>
                                                 @else
-                                                    <span class="text-nowrap">
-                                                        <span class="text-danger" style="font-size: 1.15rem; line-height: 0; vertical-align: middle;">&bull;</span>
-                                                        <span class="ml-25">Inactive</span>
+                                                    <span class="insurance-status">
+                                                        <span class="insurance-status-dot insurance-status-dot--inactive" aria-hidden="true"></span>
+                                                        <span class="insurance-status-label">Inactive</span>
                                                     </span>
                                                 @endif
                                             </td>
