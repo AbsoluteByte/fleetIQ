@@ -246,7 +246,7 @@ class CarController extends Controller
     }
 
     // ✅ Updated Update
-    public function update(Request $request, $id)
+    public function update(Request $request, Car $car)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -255,11 +255,9 @@ class CarController extends Controller
                 ->with('error', 'No active company found!');
         }
 
-        // ✅ Check ownership
-        $car = Car::where('tenant_id', $tenant->id)->findOrFail($id);
-
-        // ... rest of your existing update code (keep it as is)
-        // Just make sure tenant_id stays the same
+        if ($car->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this car.');
+        }
 
         $rules = [
             'company_id' => 'required|exists:companies,id',
@@ -466,7 +464,8 @@ class CarController extends Controller
                 return $car;
             });
 
-            return redirect()->route($this->url . 'index')
+            return redirect()
+                ->route($this->url . 'edit', $updatedCar)
                 ->with('success', 'Car updated successfully.');
 
         } catch (\Exception $e) {
