@@ -12,7 +12,7 @@
  *   https://fleetiq.absolutebyte.co.uk/remote-migrate.php?token=YOUR_MIGRATE_WEBHOOK_TOKEN
  *
  * Under PHP-FPM, {@see PHP_BINARY} often points to php-fpm, not the CLI. Set PHP_CLI_BINARY in
- * .env to your PHP CLI, e.g. /usr/bin/php8.3
+ * .env to the **CLI binary**, e.g. /usr/bin/php8.3 — NOT /etc/php/8.3 (that is a config directory on Debian/Ubuntu).
  */
 
 declare(strict_types=1);
@@ -26,8 +26,17 @@ function remote_migrate_php_cli_binary(): string
 {
     $fromEnv = (string) ($_ENV['PHP_CLI_BINARY'] ?? getenv('PHP_CLI_BINARY') ?: '');
     if ($fromEnv !== '') {
-        if (is_executable($fromEnv) || (strpbrk($fromEnv, '/\\') === false)) {
+        if (strpbrk($fromEnv, '/\\') === false) {
             return $fromEnv;
+        }
+        if (is_file($fromEnv) && is_executable($fromEnv)) {
+            return $fromEnv;
+        }
+        if (is_dir($fromEnv) && preg_match('#/php/(\d+\.\d+)$#', $fromEnv, $m)) {
+            $alt = '/usr/bin/php' . $m[1];
+            if (is_file($alt) && is_executable($alt)) {
+                return $alt;
+            }
         }
     }
 
