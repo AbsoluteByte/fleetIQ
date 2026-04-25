@@ -184,11 +184,11 @@
     {{-- Seller Name --}}
     <div class="col-md-6">
         <div class="form-group">
-            <label for="seller_name">Seller Name <span class="text-danger">*</span></label>
+            <label for="seller_name">Seller Name</label>
             <input type="text" name="seller_name" id="seller_name"
                    class="form-control @error('seller_name') is-invalid @enderror"
                    value="{{ old('seller_name') ?? (isset($model) && $model->id ? $model->seller_name : '') }}"
-                   placeholder="e.g. John Smith" required>
+                   placeholder="e.g. John Smith (optional)">
             @error('seller_name')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
