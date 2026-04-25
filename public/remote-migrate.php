@@ -10,11 +10,48 @@
  *
  * URL example:
  *   https://fleetiq.absolutebyte.co.uk/remote-migrate.php?token=YOUR_MIGRATE_WEBHOOK_TOKEN
+ *
+ * Under PHP-FPM, {@see PHP_BINARY} often points to php-fpm, not the CLI. Set PHP_CLI_BINARY in
+ * .env to your PHP CLI, e.g. /usr/bin/php8.3
  */
 
 declare(strict_types=1);
 
 $basePath = dirname(__DIR__);
+
+/**
+ * FPM and CGI SAPIs set PHP_BINARY to the php-fpm/php-cgi binary. That binary cannot run artisan.
+ */
+function remote_migrate_php_cli_binary(): string
+{
+    $fromEnv = (string) ($_ENV['PHP_CLI_BINARY'] ?? getenv('PHP_CLI_BINARY') ?: '');
+    if ($fromEnv !== '') {
+        if (is_executable($fromEnv) || (strpbrk($fromEnv, '/\\') === false)) {
+            return $fromEnv;
+        }
+    }
+
+    $binary = PHP_BINARY;
+    if ($binary !== '' && is_executable($binary) && ! preg_match('/(php-fpm|php-cgi|lsphp)(\.exe)?$/i', basename($binary))) {
+        return $binary;
+    }
+
+    $ver = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+    $candidates = [
+        '/usr/bin/php' . $ver,
+        '/usr/bin/php',
+        '/usr/local/bin/php' . $ver,
+        '/usr/local/bin/php',
+    ];
+
+    foreach ($candidates as $path) {
+        if (is_file($path) && is_executable($path) && ! preg_match('/(fpm|cgi)/i', basename($path))) {
+            return $path;
+        }
+    }
+
+    return 'php';
+}
 
 if (! is_readable($basePath . '/vendor/autoload.php')) {
     http_response_code(500);
@@ -40,9 +77,9 @@ if ($secret === '' || $token === '' || ! hash_equals($secret, $token)) {
 
 chdir($basePath);
 
-$phpBinary = PHP_BINARY && PHP_BINARY !== '' ? PHP_BINARY : 'php';
+$phpBinary = remote_migrate_php_cli_binary();
 $artisan = $basePath . DIRECTORY_SEPARATOR . 'artisan';
-$cmd = escapeshellarg($phpBinary) . ' ' . escapeshellarg($artisan) . ' migrate';
+$cmd = escapeshellarg($phpBinary) . ' ' . escapeshellarg($artisan) . ' migrate --force 2>&1';
 
 $output = shell_exec($cmd);
 
