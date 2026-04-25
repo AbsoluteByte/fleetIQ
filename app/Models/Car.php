@@ -13,12 +13,16 @@ class Car extends Model
         'tenant_id','company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
+        'seller_notes', 'log_book_applied', 'log_book_applied_date', 'old_log_book',
+        'log_book_applied_by',
         'createdBy', 'updatedBy',
     ];
 
     protected $casts = [
         'purchase_date' => 'date',
-        'purchase_price' => 'decimal:2'
+        'purchase_price' => 'decimal:2',
+        'log_book_applied' => 'boolean',
+        'log_book_applied_date' => 'date',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -36,6 +40,11 @@ class Car extends Model
     public function carModel()
     {
         return $this->belongsTo(CarModel::class);
+    }
+
+    public function logBookAppliedBy()
+    {
+        return $this->belongsTo(User::class, 'log_book_applied_by');
     }
 
     public function agreements()

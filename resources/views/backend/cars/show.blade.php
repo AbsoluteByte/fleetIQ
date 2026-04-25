@@ -71,6 +71,38 @@
                                 <strong>Seller Name:</strong>
                                 <p class="mb-0">{{ $car->seller_name ?? '—' }}</p>
                             </div>
+                            @if($car->seller_notes)
+                                <div class="col-12 mb-3">
+                                    <strong>Seller Notes:</strong>
+                                    <p class="mb-0" style="white-space: pre-wrap;">{{ $car->seller_notes }}</p>
+                                </div>
+                            @endif
+                            @if($car->log_book_applied)
+                                <div class="col-md-6 mb-3">
+                                    <strong>Log book applied:</strong>
+                                    <p class="mb-0"><span class="badge badge-success">Yes</span></p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <strong>Applied Date:</strong>
+                                    <p class="mb-0">{{ $car->log_book_applied_date ? $car->log_book_applied_date->format('d M, Y') : '—' }}</p>
+                                </div>
+                                @if($car->logBookAppliedBy)
+                                    <div class="col-md-6 mb-3">
+                                        <strong>Log book applied by:</strong>
+                                        <p class="mb-0">{{ $car->logBookAppliedBy->name ?? '—' }}</p>
+                                    </div>
+                                @endif
+                                @if($car->old_log_book)
+                                    <div class="col-md-6 mb-3">
+                                        <strong>Old log book:</strong>
+                                        <p class="mb-0">
+                                            <a href="{{ asset('uploads/cars/log_book/' . $car->old_log_book) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                <i class="fa fa-file"></i> View file
+                                            </a>
+                                        </p>
+                                    </div>
+                                @endif
+                            @endif
                             @if($car->v5_document)
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>

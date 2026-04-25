@@ -194,6 +194,67 @@
             @enderror
         </div>
     </div>
+
+    <div class="col-12">
+        <div class="form-group">
+            <label for="seller_notes">Seller Notes</label>
+            <textarea name="seller_notes" id="seller_notes" rows="3" placeholder="Optional"
+                class="form-control @error('seller_notes') is-invalid @enderror">{{ old('seller_notes', isset($model) && $model->id ? ($model->seller_notes ?? '') : '') }}</textarea>
+            @error('seller_notes')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="form-group mb-2">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="log_book_applied" name="log_book_applied" value="1"
+                    {{ old('log_book_applied', $model->log_book_applied ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="log_book_applied">Log book applied</label>
+            </div>
+        </div>
+    </div>
+    <div class="col-12" id="log-book-section"
+        style="display: {{ old('log_book_applied', $model->log_book_applied ?? false) ? 'block' : 'none' }};">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="log_book_applied_date">Applied Date</label>
+                    @php
+                        $logBookDate = old('log_book_applied_date');
+                        if ($logBookDate === null) {
+                            if (isset($model) && $model->id && $model->log_book_applied_date) {
+                                $logBookDate = $model->log_book_applied_date->format('Y-m-d');
+                            } else {
+                                $logBookDate = '';
+                            }
+                        }
+                    @endphp
+                    <input type="date" name="log_book_applied_date" id="log_book_applied_date"
+                        class="form-control @error('log_book_applied_date') is-invalid @enderror"
+                        value="{{ $logBookDate }}">
+                    @error('log_book_applied_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="old_log_book">Old log book</label>
+                    <input type="file" name="old_log_book" id="old_log_book"
+                        class="form-control @error('old_log_book') is-invalid @enderror"
+                        accept=".pdf,.jpg,.jpeg,.png">
+                    @if(isset($model) && $model->id && $model->old_log_book)
+                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/log_book/' . $model->old_log_book) }}" target="_blank">View file</a></small>
+                    @endif
+                    @error('old_log_book')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 {{-- MOT Information Section --}}
@@ -677,6 +738,22 @@
         let roadTaxIndex = {{ isset($roadTaxes) && is_countable($roadTaxes) ? count($roadTaxes) : 1 }};
         let phvIndex = {{ isset($phvs) && is_countable($phvs) ? count($phvs) : 1 }};
 
+        const todayYmd = new Date().toISOString().slice(0, 10);
+
+        function toggleLogBookSection() {
+            const cb = document.getElementById('log_book_applied');
+            const section = document.getElementById('log-book-section');
+            const dateInput = document.getElementById('log_book_applied_date');
+            if (cb.checked) {
+                section.style.display = 'block';
+                if (dateInput && !dateInput.value) {
+                    dateInput.value = todayYmd;
+                }
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
         const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
             return [
                 'id' => $provider->id,
@@ -735,9 +812,18 @@
         document.addEventListener('DOMContentLoaded', function() {
             filterInsuranceProviders();
             toggleInsuranceSection();
+            toggleLogBookSection();
+            (function defaultEmptyAppliedDate() {
+                const dateInput = document.getElementById('log_book_applied_date');
+                const cb = document.getElementById('log_book_applied');
+                if (cb && cb.checked && dateInput && !dateInput.value) {
+                    dateInput.value = todayYmd;
+                }
+            })();
 
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
+            document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
         });
 
         function addMOT() {

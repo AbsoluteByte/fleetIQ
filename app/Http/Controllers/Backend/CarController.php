@@ -98,6 +98,10 @@ class CarController extends Controller
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
             'seller_name' => 'nullable|string|max:255',
+            'seller_notes' => 'nullable|string',
+            'log_book_applied' => 'nullable|boolean',
+            'log_book_applied_date' => 'nullable|date',
+            'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
@@ -136,6 +140,7 @@ class CarController extends Controller
                 }
 
                 $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData = $this->mergeLogBookCarData($request, $carData, null);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['createdBy'] = Auth::id();
                 $car = Car::create($carData);
@@ -217,7 +222,7 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
 
-        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status']);
+        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy']);
         return view($this->dir . 'show', compact('car'));
     }
 
@@ -272,6 +277,10 @@ class CarController extends Controller
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
             'seller_name' => 'nullable|string|max:255',
+            'seller_notes' => 'nullable|string',
+            'log_book_applied' => 'nullable|boolean',
+            'log_book_applied_date' => 'nullable|date',
+            'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
             'mots.*.id' => 'nullable|exists:car_mots,id',
             'mots.*.expiry_date' => 'required|date',
@@ -320,6 +329,7 @@ class CarController extends Controller
                 }
 
                 $carData = $this->carMassAssignmentFromValidated($validated, $request);
+                $carData = $this->mergeLogBookCarData($request, $carData, $car);
                 $carData['tenant_id'] = $tenant->id;
                 $carData['updatedBy'] = Auth::id();
                 $car->update($carData);
@@ -513,7 +523,7 @@ class CarController extends Controller
         $keys = [
             'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
-            'purchase_type', 'seller_name',
+            'purchase_type', 'seller_name', 'seller_notes',
         ];
 
         $data = array_intersect_key($validated, array_flip($keys));
@@ -522,7 +532,56 @@ class CarController extends Controller
             $data['seller_name'] = $request->string('seller_name')->value();
         }
 
+        if (! array_key_exists('seller_notes', $data) && $request->has('seller_notes')) {
+            $data['seller_notes'] = $request->string('seller_notes')->value();
+        }
+
         return $data;
+    }
+
+    /**
+     * Log book fields, optional file, and who first enabled "log book applied".
+     */
+    private function mergeLogBookCarData(Request $request, array $carData, ?Car $existing): array
+    {
+        $isApplied = $request->boolean('log_book_applied');
+        $carData['log_book_applied'] = $isApplied;
+
+        if (array_key_exists('seller_notes', $carData) && $carData['seller_notes'] === '') {
+            $carData['seller_notes'] = null;
+        }
+
+        if (! $isApplied) {
+            $carData['log_book_applied_date'] = null;
+            $carData['log_book_applied_by'] = null;
+            if ($existing?->old_log_book) {
+                $this->deleteFile($existing->old_log_book, 'uploads/cars/log_book');
+            }
+            $carData['old_log_book'] = null;
+
+            return $carData;
+        }
+
+        $rawDate = $request->input('log_book_applied_date');
+        $carData['log_book_applied_date'] = ($rawDate !== null && $rawDate !== '') ? $rawDate : null;
+
+        if ($existing === null || ! $existing->log_book_applied) {
+            $carData['log_book_applied_by'] = Auth::id();
+        } else {
+            $carData['log_book_applied_by'] = $existing->log_book_applied_by;
+        }
+
+        if ($request->hasFile('old_log_book')) {
+            $name = $this->uploadFile($request->file('old_log_book'), 'uploads/cars/log_book');
+            if ($existing?->old_log_book) {
+                $this->deleteFile($existing->old_log_book, 'uploads/cars/log_book');
+            }
+            $carData['old_log_book'] = $name;
+        } elseif ($existing) {
+            $carData['old_log_book'] = $existing->old_log_book;
+        }
+
+        return $carData;
     }
 
     // ✅ Keep your existing helper methods
@@ -566,6 +625,7 @@ class CarController extends Controller
     {
         $filesToDelete = [
             $car->v5_document ? public_path('uploads/cars/' . $car->v5_document) : null,
+            $car->old_log_book ? public_path('uploads/cars/log_book/' . $car->old_log_book) : null,
         ];
 
         foreach ($car->mots as $mot) {
