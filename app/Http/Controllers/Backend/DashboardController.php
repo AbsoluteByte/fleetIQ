@@ -431,10 +431,11 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 7. ROAD TAX ====================
+        // ==================== 7. ROAD TAX (exclude SORN: vehicle off the road) ====================
         $allRoadTaxes = CarRoadTax::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
+                $query->where('tenant_id', $tenant->id)
+                    ->where('sorn_applied', false);
             })
             ->get();
 

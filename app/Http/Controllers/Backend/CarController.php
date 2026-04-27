@@ -241,7 +241,7 @@ class CarController extends Controller
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances', 'sornAppliedBy'])
             ->findOrFail($id);
         $this->sortCarHistoryRelations($model);
 
@@ -545,6 +545,32 @@ class CarController extends Controller
             })
             ->values();
         $car->setRelation('phvs', $phvs);
+    }
+
+    public function applySorn(Car $car)
+    {
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant || $car->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+        if ($car->sorn_applied) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'SORN is already applied for this car.',
+            ], 422);
+        }
+
+        $car->update([
+            'sorn_applied' => true,
+            'sorn_applied_at' => now(),
+            'sorn_applied_by' => Auth::id(),
+            'updatedBy' => Auth::id(),
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'redirect' => 'https://www.gov.uk/make-a-sorn',
+        ]);
     }
 
     public function destroyMot(Car $car, int $car_mot)

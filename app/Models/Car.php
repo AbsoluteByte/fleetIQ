@@ -15,6 +15,7 @@ class Car extends Model
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
         'seller_notes', 'log_book_applied', 'log_book_applied_date', 'old_log_book',
         'log_book_applied_by',
+        'sorn_applied', 'sorn_applied_at', 'sorn_applied_by',
         'createdBy', 'updatedBy',
     ];
 
@@ -23,6 +24,8 @@ class Car extends Model
         'purchase_price' => 'decimal:2',
         'log_book_applied' => 'boolean',
         'log_book_applied_date' => 'date',
+        'sorn_applied' => 'boolean',
+        'sorn_applied_at' => 'datetime',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -45,6 +48,11 @@ class Car extends Model
     public function logBookAppliedBy()
     {
         return $this->belongsTo(User::class, 'log_book_applied_by');
+    }
+
+    public function sornAppliedBy()
+    {
+        return $this->belongsTo(User::class, 'sorn_applied_by');
     }
 
     public function agreements()

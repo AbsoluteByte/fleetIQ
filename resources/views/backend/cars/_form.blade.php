@@ -487,6 +487,17 @@
                     View All
                 </button>
                 @endif
+                @if($isCarEdit)
+                    @if($model->sorn_applied)
+                        <button type="button" class="btn btn-sm btn-success mr-1" data-toggle="modal" data-target="#sornDetailsModal" title="View SORN details">
+                            <i class="fa fa-check"></i> SORN Applied
+                        </button>
+                    @else
+                        <button type="button" class="btn btn-sm btn-outline-success mr-1" data-toggle="modal" data-target="#applySornModal">
+                            <i class="fa fa-road"></i> Apply SORN
+                        </button>
+                    @endif
+                @endif
                 <button type="button" class="btn btn-sm btn-success" onclick="addRoadTax()">
                     <i class="fa fa-plus"></i> Add Road Tax
                 </button>
@@ -580,6 +591,84 @@
         </div>
     </div>
 </div>
+
+@if($isCarEdit && ! $model->sorn_applied)
+<div class="modal fade" id="applySornModal" tabindex="-1" role="dialog" aria-labelledby="applySornModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0" id="applySornModalLabel">
+                    <i class="fa fa-road text-success mr-50"></i> Apply SORN
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 text-body">Are you sure you want to apply SORN for this car?</p>
+                <p class="small text-muted mt-1 mb-0">If you continue, the vehicle will be recorded as off the road in FleetIQ and you will be redirected to <strong>GOV.UK</strong> to complete the statutory notification (SORN) where required.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="applySornConfirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+@if($isCarEdit && $model->sorn_applied)
+@php
+    $sornDetailsWho = $model->sornAppliedBy?->name;
+    $sornDetailsWhen = $model->sorn_applied_at
+        ? $model->sorn_applied_at->format('d M Y') . ' at ' . $model->sorn_applied_at->format('h:i A')
+        : null;
+@endphp
+<div class="modal fade" id="sornDetailsModal" tabindex="-1" role="dialog" aria-labelledby="sornDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 32rem;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0" id="sornDetailsModalLabel">
+                    <i class="fa fa-check-circle text-success mr-50"></i> SORN applied
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 text-body" style="line-height: 1.65;">
+                    @if($sornDetailsWho)
+                        <strong>{{ $sornDetailsWho }}</strong> applied for SORN for this car
+                        @if($sornDetailsWhen)
+                            on <strong>{{ $sornDetailsWhen }}</strong>
+                        @endif
+                        .
+                    @else
+                        SORN was recorded for this car
+                        @if($sornDetailsWhen)
+                            on <strong>{{ $sornDetailsWhen }}</strong>
+                        @endif
+                        .
+                    @endif
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+@if($isCarEdit)
+<div id="sornApplyOverlay" class="d-none" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.55);align-items:center;justify-content:center;flex-direction:column;">
+    <div class="bg-white rounded shadow p-4 text-center" style="min-width:260px;border-radius:12px;">
+        <div class="spinner-border text-success mb-3" role="status" aria-hidden="true"></div>
+        <div class="font-weight-500 text-dark">Saving…</div>
+        <div class="small text-muted mt-1">Please wait</div>
+    </div>
+</div>
+@endif
 
 @if($showRoadTaxViewAll)
 <div class="modal fade" id="editRoadTaxHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editRoadTaxHistoryModalLabel" aria-hidden="true">
@@ -1056,6 +1145,66 @@
                 alert('Could not delete this record.');
             });
         }
+
+        @if($isCarEdit)
+        (function () {
+            @if( ! $model->sorn_applied)
+            var applySornUrl = {!! json_encode(route('cars.apply-sorn', $model)) !!};
+            var sornBtn = document.getElementById('applySornConfirmBtn');
+            if (sornBtn) {
+                sornBtn.addEventListener('click', function () {
+                    var overlay = document.getElementById('sornApplyOverlay');
+                    if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
+                        window.jQuery('#applySornModal').modal('hide');
+                    } else {
+                        var m = document.getElementById('applySornModal');
+                        if (m) {
+                            m.classList.remove('show');
+                            m.setAttribute('aria-hidden', 'true');
+                            m.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+                            var bd = document.querySelectorAll('.modal-backdrop');
+                            bd.forEach(function (el) { el.remove(); });
+                        }
+                    }
+                    if (overlay) {
+                        overlay.classList.remove('d-none');
+                        overlay.classList.add('d-flex');
+                    }
+                    fetch(applySornUrl, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'same-origin',
+                    }).then(function (r) {
+                        return r.json().then(function (data) {
+                            if (!r.ok) {
+                                throw new Error((data && data.message) || 'Request failed');
+                            }
+                            return data;
+                        });
+                    }).then(function (data) {
+                        if (data.ok && data.redirect) {
+                            window.location.href = data.redirect;
+                        } else {
+                            throw new Error();
+                        }
+                    }).catch(function (err) {
+                        if (overlay) {
+                            overlay.classList.add('d-none');
+                            overlay.classList.remove('d-flex');
+                        }
+                        alert(err.message || 'Could not apply SORN. Please try again.');
+                    });
+                });
+            }
+            @endif
+        })();
+        @endif
 
         const todayYmd = new Date().toISOString().slice(0, 10);
 
