@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarModel;
+use App\Models\CarMot;
+use App\Models\CarPhv;
+use App\Models\CarRoadTax;
 use App\Models\Company;
 use App\Models\Counsel;
 use App\Models\InsuranceProvider;
@@ -223,6 +226,7 @@ class CarController extends Controller
         }
 
         $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy']);
+        $this->sortCarHistoryRelations($car);
         return view($this->dir . 'show', compact('car'));
     }
 
@@ -237,8 +241,9 @@ class CarController extends Controller
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs', 'insurances'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances'])
             ->findOrFail($id);
+        $this->sortCarHistoryRelations($model);
 
         // ✅ Filter by tenant
         $companies = Company::where('tenant_id', $tenant->id)->get();
@@ -513,6 +518,75 @@ class CarController extends Controller
             return redirect()->back()
                 ->with('error', 'Error deleting car: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Most recent first: MOT and PHV by expiry date, road tax by start date.
+     */
+    private function sortCarHistoryRelations(Car $car): void
+    {
+        $mots = $car->mots
+            ->sortByDesc(function ($m) {
+                return optional($m->expiry_date)->timestamp ?? 0;
+            })
+            ->values();
+        $car->setRelation('mots', $mots);
+
+        $roadTaxes = $car->roadTaxes
+            ->sortByDesc(function ($r) {
+                return optional($r->start_date)->timestamp ?? 0;
+            })
+            ->values();
+        $car->setRelation('roadTaxes', $roadTaxes);
+
+        $phvs = $car->phvs
+            ->sortByDesc(function ($p) {
+                return optional($p->expiry_date)->timestamp ?? 0;
+            })
+            ->values();
+        $car->setRelation('phvs', $phvs);
+    }
+
+    public function destroyMot(Car $car, int $car_mot)
+    {
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant || $car->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+        $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
+        if ($record->document) {
+            $this->deleteFile($record->document, 'uploads/cars/mot_documents');
+        }
+        $record->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroyRoadTax(Car $car, int $car_road_tax)
+    {
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant || $car->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+        $record = CarRoadTax::where('car_id', $car->id)->where('id', $car_road_tax)->firstOrFail();
+        $record->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroyPhv(Car $car, int $car_phv)
+    {
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant || $car->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+        $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
+        if ($record->document) {
+            $this->deleteFile($record->document, 'uploads/cars/phv_documents');
+        }
+        $record->delete();
+
+        return response()->json(['ok' => true]);
     }
 
     /**

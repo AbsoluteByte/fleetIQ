@@ -116,17 +116,24 @@
                         </div>
 
                         <!-- MOT Information -->
+                        @php
+                            $motsSorted = $car->mots;
+                            $latestMot = $motsSorted->count() > 0 ? $motsSorted->first() : null;
+                            $olderMots = $motsSorted->count() > 1 ? $motsSorted->slice(1) : collect();
+                        @endphp
                         <div class="row mb-4">
-                            <div class="col-12">
-                                <h4 class="border-bottom pb-2 mb-3">MOT Information</h4>
+                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
+                                <h4 class="mb-0">MOT Information</h4>
+                                @if($olderMots->isNotEmpty())
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#showMotHistoryModal">View All</button>
+                                @endif
                             </div>
-                            @if($car->mots && $car->mots->count() > 0)
+                            @if($latestMot)
                                 <div class="col-12">
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
-                                                <th>#</th>
                                                 <th>Expiry Date</th>
                                                 <th>Amount</th>
                                                 <th>Term</th>
@@ -134,15 +141,13 @@
                                             </tr>
                                             </thead>
                                             <tbody>
-                                            @foreach($car->mots as $index => $mot)
                                                 <tr>
-                                                    <td>{{ $index + 1 }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($mot->expiry_date)->format('d M, Y') }}</td>
-                                                    <td>£{{ number_format($mot->amount, 2) }}</td>
-                                                    <td>{{ $mot->term }}</td>
+                                                    <td>{{ $latestMot->expiry_date->format('d M, Y') }}</td>
+                                                    <td>£{{ number_format($latestMot->amount, 2) }}</td>
+                                                    <td>{{ $latestMot->term }}</td>
                                                     <td>
-                                                        @if($mot->document)
-                                                            <a href="{{ asset('uploads/cars/mot_documents/' . $mot->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                        @if($latestMot->document)
+                                                            <a href="{{ asset('uploads/cars/mot_documents/' . $latestMot->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -150,7 +155,6 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                            @endforeach
                                             </tbody>
                                         </table>
                                     </div>
@@ -161,33 +165,79 @@
                                 </div>
                             @endif
                         </div>
+                        @if($olderMots->isNotEmpty())
+                        <div class="modal fade" id="showMotHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showMotHistoryModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="showMotHistoryModalLabel">Previous MOT records</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    </div>
+                                    <div class="modal-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered mb-0">
+                                                <thead class="thead-light">
+                                                    <tr>
+                                                        <th>Expiry Date</th>
+                                                        <th>Amount</th>
+                                                        <th>Term</th>
+                                                        <th>Document</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($olderMots as $mot)
+                                                    <tr>
+                                                        <td>{{ $mot->expiry_date->format('d M, Y') }}</td>
+                                                        <td>£{{ number_format($mot->amount, 2) }}</td>
+                                                        <td>{{ $mot->term }}</td>
+                                                        <td>
+                                                            @if($mot->document)
+                                                                <a href="{{ asset('uploads/cars/mot_documents/' . $mot->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                            @else
+                                                                <span class="text-muted">—</span>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
                         <!-- Road Tax Information -->
+                        @php
+                            $rtsSorted = $car->roadTaxes;
+                            $latestRt = $rtsSorted->count() > 0 ? $rtsSorted->first() : null;
+                            $olderRts = $rtsSorted->count() > 1 ? $rtsSorted->slice(1) : collect();
+                        @endphp
                         <div class="row mb-4">
-                            <div class="col-12">
-                                <h4 class="border-bottom pb-2 mb-3">Road Tax Information</h4>
+                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
+                                <h4 class="mb-0">Road Tax Information</h4>
+                                @if($olderRts->isNotEmpty())
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#showRoadTaxHistoryModal">View All</button>
+                                @endif
                             </div>
-                            @if($car->roadTaxes && $car->roadTaxes->count() > 0)
+                            @if($latestRt)
                                 <div class="col-12">
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
-                                                <th>#</th>
                                                 <th>Start Date</th>
                                                 <th>Term</th>
                                                 <th>Amount</th>
                                             </tr>
                                             </thead>
                                             <tbody>
-                                            @foreach($car->roadTaxes as $index => $roadTax)
                                                 <tr>
-                                                    <td>{{ $index + 1 }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($roadTax->start_date)->format('d M, Y') }}</td>
-                                                    <td>{{ $roadTax->term }}</td>
-                                                    <td>£{{ number_format($roadTax->amount, 2) }}</td>
+                                                    <td>{{ $latestRt->start_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestRt->term }}</td>
+                                                    <td>£{{ number_format($latestRt->amount, 2) }}</td>
                                                 </tr>
-                                            @endforeach
                                             </tbody>
                                         </table>
                                     </div>
@@ -198,19 +248,60 @@
                                 </div>
                             @endif
                         </div>
+                        @if($olderRts->isNotEmpty())
+                        <div class="modal fade" id="showRoadTaxHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showRoadTaxHistoryModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="showRoadTaxHistoryModalLabel">Previous road tax records</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    </div>
+                                    <div class="modal-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered mb-0">
+                                                <thead class="thead-light">
+                                                    <tr>
+                                                        <th>Start Date</th>
+                                                        <th>Term</th>
+                                                        <th>Amount</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($olderRts as $roadTax)
+                                                    <tr>
+                                                        <td>{{ $roadTax->start_date->format('d M, Y') }}</td>
+                                                        <td>{{ $roadTax->term }}</td>
+                                                        <td>£{{ number_format($roadTax->amount, 2) }}</td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
                         <!-- PHV License Information -->
+                        @php
+                            $phvsSorted = $car->phvs;
+                            $latestPhv = $phvsSorted->count() > 0 ? $phvsSorted->first() : null;
+                            $olderPhvs = $phvsSorted->count() > 1 ? $phvsSorted->slice(1) : collect();
+                        @endphp
                         <div class="row mb-4">
-                            <div class="col-12">
-                                <h4 class="border-bottom pb-2 mb-3">PHV License Information</h4>
+                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
+                                <h4 class="mb-0">PHV License Information</h4>
+                                @if($olderPhvs->isNotEmpty())
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#showPhvHistoryModal">View All</button>
+                                @endif
                             </div>
-                            @if($car->phvs && $car->phvs->count() > 0)
+                            @if($latestPhv)
                                 <div class="col-12">
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
-                                                <th>#</th>
                                                 <th>Counsel</th>
                                                 <th>Start Date</th>
                                                 <th>Expiry Date</th>
@@ -220,17 +311,15 @@
                                             </tr>
                                             </thead>
                                             <tbody>
-                                            @foreach($car->phvs as $index => $phv)
                                                 <tr>
-                                                    <td>{{ $index + 1 }}</td>
-                                                    <td>{{ $phv->counsel->name ?? 'N/A' }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($phv->start_date)->format('d M, Y') }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($phv->expiry_date)->format('d M, Y') }}</td>
-                                                    <td>£{{ number_format($phv->amount, 2) }}</td>
-                                                    <td>{{ $phv->notify_before_expiry }} days</td>
+                                                    <td>{{ $latestPhv->counsel->name ?? 'N/A' }}</td>
+                                                    <td>{{ $latestPhv->start_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestPhv->expiry_date->format('d M, Y') }}</td>
+                                                    <td>£{{ number_format($latestPhv->amount, 2) }}</td>
+                                                    <td>{{ $latestPhv->notify_before_expiry }} days</td>
                                                     <td>
-                                                        @if($phv->document)
-                                                            <a href="{{ asset('uploads/cars/phv_documents/' . $phv->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                        @if($latestPhv->document)
+                                                            <a href="{{ asset('uploads/cars/phv_documents/' . $latestPhv->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -238,7 +327,6 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                            @endforeach
                                             </tbody>
                                         </table>
                                     </div>
@@ -249,6 +337,52 @@
                                 </div>
                             @endif
                         </div>
+                        @if($olderPhvs->isNotEmpty())
+                        <div class="modal fade" id="showPhvHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showPhvHistoryModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="showPhvHistoryModalLabel">Previous PHV records</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    </div>
+                                    <div class="modal-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered mb-0">
+                                                <thead class="thead-light">
+                                                    <tr>
+                                                        <th>Counsel</th>
+                                                        <th>Start</th>
+                                                        <th>Expiry</th>
+                                                        <th>Amount</th>
+                                                        <th>Notify</th>
+                                                        <th>Document</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($olderPhvs as $phv)
+                                                    <tr>
+                                                        <td>{{ $phv->counsel->name ?? 'N/A' }}</td>
+                                                        <td>{{ $phv->start_date->format('d M, Y') }}</td>
+                                                        <td>{{ $phv->expiry_date->format('d M, Y') }}</td>
+                                                        <td>£{{ number_format($phv->amount, 2) }}</td>
+                                                        <td>{{ $phv->notify_before_expiry }} days</td>
+                                                        <td>
+                                                            @if($phv->document)
+                                                                <a href="{{ asset('uploads/cars/phv_documents/' . $phv->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                            @else
+                                                                <span class="text-muted">—</span>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
                         <!-- Insurance Information -->
                         <div class="row mb-4">

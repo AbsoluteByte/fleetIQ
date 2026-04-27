@@ -257,30 +257,52 @@
     </div>
 </div>
 
+@php
+    $isCarEdit = isset($model) && $model->id;
+    if (is_array($oldMots = old('mots'))) {
+        $motsForMain = collect($oldMots)->values();
+        if ($motsForMain->isEmpty()) {
+            $motsForMain = collect([[]]);
+        }
+        $motsOlder = collect();
+        $useMotsSplit = false;
+    } elseif ($isCarEdit && $model->mots->isNotEmpty()) {
+        $motsForMain = $model->mots->take(1);
+        $motsOlder = $model->mots->slice(1)->values();
+        $useMotsSplit = true;
+    } else {
+        $motsForMain = collect([[]]);
+        $motsOlder = collect();
+        $useMotsSplit = false;
+    }
+    $showMotViewAll = $isCarEdit && $useMotsSplit && $motsOlder->isNotEmpty();
+    $motMainCount = $motsForMain->count();
+    $motHiddenStartIndex = $motMainCount;
+@endphp
+
 {{-- MOT Information Section --}}
 <div class="row mt-1">
     <div class="col-12">
-        <h5 class="mb-1">
-            <i class="fa fa-tools"></i> MOT Information
-            <button type="button" class="btn btn-sm btn-success float-right" onclick="addMOT()">
-                <i class="fa fa-plus"></i> Add MOT
-            </button>
+        <h5 class="mb-1 d-flex flex-wrap align-items-center justify-content-between">
+            <span>
+                <i class="fa fa-tools"></i> MOT Information
+            </span>
+            <span>
+                @if($showMotViewAll)
+                <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#editMotHistoryModal">
+                    View All
+                </button>
+                @endif
+                <button type="button" class="btn btn-sm btn-success" onclick="addMOT()">
+                    <i class="fa fa-plus"></i> Add MOT
+                </button>
+            </span>
         </h5>
 
         <div class="card">
             <div class="card-body">
                 <div id="mots-container">
-                    @php
-                        if(old('mots')) {
-                            $mots = old('mots');
-                        } elseif(isset($model) && $model->id && $model->mots->count() > 0) {
-                            $mots = $model->mots;
-                        } else {
-                            $mots = [[]];
-                        }
-                    @endphp
-
-                    @foreach($mots as $index => $mot)
+                    @foreach($motsForMain as $index => $mot)
                         <div class="mot-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
                             @if(isset($mot->id))
                                 <input type="hidden" name="mots[{{ $index }}][id]" value="{{ $mot->id }}">
@@ -308,7 +330,7 @@
                                         </div>
                                         <input type="number" name="mots[{{ $index }}][amount]"
                                                class="form-control @error('mots.'.$index.'.amount') is-invalid @enderror"
-                                               value="{{ old('mots.'.$index.'.amount') ?? ($mot['amount'] ?? '') }}"
+                                               value="{{ old('mots.'.$index.'.amount') ?? (is_object($mot) && isset($mot->amount) ? $mot->amount : ($mot['amount'] ?? '')) }}"
                                                step="0.01" min="0" required>
                                         @error('mots.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -322,7 +344,7 @@
                                     <label>Term <span class="text-danger">*</span></label>
                                     <input type="text" name="mots[{{ $index }}][term]"
                                            class="form-control @error('mots.'.$index.'.term') is-invalid @enderror"
-                                           value="{{ old('mots.'.$index.'.term') ?? ($mot['term'] ?? '') }}"
+                                           value="{{ old('mots.'.$index.'.term') ?? (is_object($mot) && isset($mot->term) ? $mot->term : ($mot['term'] ?? '')) }}"
                                            placeholder="e.g. 12 months" required>
                                     @error('mots.'.$index.'.term')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -336,8 +358,8 @@
                                     <input type="file" name="mots[{{ $index }}][document]"
                                            class="form-control @error('mots.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
-                                    @if(isset($mot['document']) && $mot['document'])
-                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/mot_documents/' . $mot['document']) }}" target="_blank">View</a></small>
+                                    @if((is_object($mot) && $mot->document) || (isset($mot['document']) && $mot['document']))
+                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document'])) }}" target="_blank">View</a></small>
                                     @endif
                                     @error('mots.'.$index.'.document')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -360,35 +382,121 @@
                         </div>
                     @endforeach
                 </div>
+                <div id="mots-preserved" class="d-none">
+                    @if($isCarEdit && $useMotsSplit && $motsOlder->isNotEmpty())
+                        @php $hMot = $motHiddenStartIndex; @endphp
+                        @foreach($motsOlder as $motP)
+                            <div class="mot-preserved" data-record-id="{{ $motP->id }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][id]" value="{{ $motP->id }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][expiry_date]" value="{{ $motP->expiry_date->format('Y-m-d') }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][amount]" value="{{ $motP->amount }}">
+                                <input type="hidden" name="mots[{{ $hMot }}][term]" value="{{ e($motP->term) }}">
+                            </div>
+                            @php $hMot++; @endphp
+                        @endforeach
+                    @endif
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+@if($showMotViewAll)
+<div class="modal fade" id="editMotHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editMotHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editMotHistoryModalLabel">Previous MOT records</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Expiry Date</th>
+                                <th>Amount</th>
+                                <th>Term</th>
+                                <th>Document</th>
+                                <th class="text-right" style="width:80px">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($motsOlder as $motH)
+                            <tr data-hist-mot-id="{{ $motH->id }}">
+                                <td>{{ $motH->expiry_date->format('d M, Y') }}</td>
+                                <td>£{{ number_format($motH->amount, 2) }}</td>
+                                <td>{{ $motH->term }}</td>
+                                <td>
+                                    @if($motH->document)
+                                        <a href="{{ asset('uploads/cars/mot_documents/' . $motH->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                                <td class="text-right">
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryMot({{ $model->id }}, {{ $motH->id }})" title="Delete">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+@php
+    if (is_array($oldRts = old('road_taxes'))) {
+        $roadTaxesForMain = collect($oldRts)->values();
+        if ($roadTaxesForMain->isEmpty()) {
+            $roadTaxesForMain = collect([[]]);
+        }
+        $roadTaxesOlder = collect();
+        $useRoadTaxSplit = false;
+    } elseif ($isCarEdit && $model->roadTaxes->isNotEmpty()) {
+        $roadTaxesForMain = $model->roadTaxes->take(1);
+        $roadTaxesOlder = $model->roadTaxes->slice(1)->values();
+        $useRoadTaxSplit = true;
+    } else {
+        $roadTaxesForMain = collect([[]]);
+        $roadTaxesOlder = collect();
+        $useRoadTaxSplit = false;
+    }
+    $showRoadTaxViewAll = $isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty();
+    $rtMainCount = $roadTaxesForMain->count();
+    $rtHiddenStartIndex = $rtMainCount;
+@endphp
+
 {{-- Road Tax Information Section --}}
 <div class="row mt-1">
     <div class="col-12">
-        <h5 class="mb-1">
-            <i class="fa fa-road"></i> Road Tax Information
-            <button type="button" class="btn btn-sm btn-success float-right" onclick="addRoadTax()">
-                <i class="fa fa-plus"></i> Add Road Tax
-            </button>
+        <h5 class="mb-1 d-flex flex-wrap align-items-center justify-content-between">
+            <span>
+                <i class="fa fa-road"></i> Road Tax Information
+            </span>
+            <span>
+                @if($showRoadTaxViewAll)
+                <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#editRoadTaxHistoryModal">
+                    View All
+                </button>
+                @endif
+                <button type="button" class="btn btn-sm btn-success" onclick="addRoadTax()">
+                    <i class="fa fa-plus"></i> Add Road Tax
+                </button>
+            </span>
         </h5>
 
         <div class="card">
             <div class="card-body">
                 <div id="roadtax-container">
-                    @php
-                        if(old('road_taxes')) {
-                            $roadTaxes = old('road_taxes');
-                        } elseif(isset($model) && $model->id && $model->roadTaxes->count() > 0) {
-                            $roadTaxes = $model->roadTaxes;
-                        } else {
-                            $roadTaxes = [[]];
-                        }
-                    @endphp
-
-                    @foreach($roadTaxes as $index => $roadTax)
+                    @foreach($roadTaxesForMain as $index => $roadTax)
                         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
                             <div class="col-md-4">
                                 <div class="form-group">
@@ -411,7 +519,7 @@
                                             required>
                                         <option value="">Select Term</option>
                                         @php
-                                            $selectedTerm = old('road_taxes.'.$index.'.term') ?? ($roadTax['term'] ?? '');
+                                            $selectedTerm = old('road_taxes.'.$index.'.term') ?? (is_object($roadTax) && isset($roadTax->term) ? $roadTax->term : ($roadTax['term'] ?? ''));
                                         @endphp
                                         <option value="6 months" {{ $selectedTerm == '6 months' ? 'selected' : '' }}>6 Months</option>
                                         <option value="12 months" {{ $selectedTerm == '12 months' ? 'selected' : '' }}>12 Months</option>
@@ -431,7 +539,7 @@
                                         </div>
                                         <input type="number" name="road_taxes[{{ $index }}][amount]"
                                                class="form-control @error('road_taxes.'.$index.'.amount') is-invalid @enderror"
-                                               value="{{ old('road_taxes.'.$index.'.amount') ?? ($roadTax['amount'] ?? '') }}"
+                                               value="{{ old('road_taxes.'.$index.'.amount') ?? (is_object($roadTax) && isset($roadTax->amount) ? $roadTax->amount : ($roadTax['amount'] ?? '')) }}"
                                                step="0.01" min="0" required>
                                         @error('road_taxes.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -455,35 +563,112 @@
                         </div>
                     @endforeach
                 </div>
+                <div id="roadtax-preserved" class="d-none">
+                    @if($isCarEdit && $useRoadTaxSplit && $roadTaxesOlder->isNotEmpty())
+                        @php $hRt = $rtHiddenStartIndex; @endphp
+                        @foreach($roadTaxesOlder as $rtP)
+                            <div class="roadtax-preserved" data-record-id="{{ $rtP->id }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][start_date]" value="{{ $rtP->start_date->format('Y-m-d') }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][term]" value="{{ e($rtP->term) }}">
+                                <input type="hidden" name="road_taxes[{{ $hRt }}][amount]" value="{{ $rtP->amount }}">
+                            </div>
+                            @php $hRt++; @endphp
+                        @endforeach
+                    @endif
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+@if($showRoadTaxViewAll)
+<div class="modal fade" id="editRoadTaxHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editRoadTaxHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editRoadTaxHistoryModalLabel">Previous road tax records</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Start Date</th>
+                                <th>Term</th>
+                                <th>Amount</th>
+                                <th class="text-right" style="width:80px">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($roadTaxesOlder as $rtH)
+                            <tr data-hist-rt-id="{{ $rtH->id }}">
+                                <td>{{ $rtH->start_date->format('d M, Y') }}</td>
+                                <td>{{ $rtH->term }}</td>
+                                <td>£{{ number_format($rtH->amount, 2) }}</td>
+                                <td class="text-right">
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryRoadTax({{ $model->id }}, {{ $rtH->id }})" title="Delete">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+@php
+    if (is_array($oldPhvs = old('phvs'))) {
+        $phvsForMain = collect($oldPhvs)->values();
+        if ($phvsForMain->isEmpty()) {
+            $phvsForMain = collect([[]]);
+        }
+        $phvsOlder = collect();
+        $usePhvSplit = false;
+    } elseif ($isCarEdit && $model->phvs->isNotEmpty()) {
+        $phvsForMain = $model->phvs->take(1);
+        $phvsOlder = $model->phvs->slice(1)->values();
+        $usePhvSplit = true;
+    } else {
+        $phvsForMain = collect([[]]);
+        $phvsOlder = collect();
+        $usePhvSplit = false;
+    }
+    $showPhvViewAll = $isCarEdit && $usePhvSplit && $phvsOlder->isNotEmpty();
+    $phvMainCount = $phvsForMain->count();
+    $phvHiddenStartIndex = $phvMainCount;
+@endphp
+
 {{-- PHV Information Section --}}
 <div class="row mt-1">
     <div class="col-12">
-        <h5 class="mb-1">
-            <i class="fa fa-taxi"></i> PHV Information
-            <button type="button" class="btn btn-sm btn-success float-right" onclick="addPHV()">
-                <i class="fa fa-plus"></i> Add PHV
-            </button>
+        <h5 class="mb-1 d-flex flex-wrap align-items-center justify-content-between">
+            <span>
+                <i class="fa fa-taxi"></i> PHV Information
+            </span>
+            <span>
+                @if($showPhvViewAll)
+                <button type="button" class="btn btn-sm btn-outline-primary mr-1" data-toggle="modal" data-target="#editPhvHistoryModal">
+                    View All
+                </button>
+                @endif
+                <button type="button" class="btn btn-sm btn-success" onclick="addPHV()">
+                    <i class="fa fa-plus"></i> Add PHV
+                </button>
+            </span>
         </h5>
 
         <div class="card">
             <div class="card-body">
                 <div id="phv-container">
-                    @php
-                        if(old('phvs')) {
-                            $phvs = old('phvs');
-                        } elseif(isset($model) && $model->id && $model->phvs->count() > 0) {
-                            $phvs = $model->phvs;
-                        } else {
-                            $phvs = [[]];
-                        }
-                    @endphp
-
-                    @foreach($phvs as $index => $phv)
+                    @foreach($phvsForMain as $index => $phv)
                         <div class="phv-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
                             @if(isset($phv->id))
                                 <input type="hidden" name="phvs[{{ $index }}][id]" value="{{ $phv->id }}">
@@ -498,7 +683,7 @@
                                         <option value="">Select Counsel</option>
                                         @foreach($counsels as $counsel)
                                             @php
-                                                $selectedCounsel = old('phvs.'.$index.'.counsel_id') ?? ($phv['counsel_id'] ?? '');
+                                                $selectedCounsel = old('phvs.'.$index.'.counsel_id') ?? (is_object($phv) && isset($phv->counsel_id) ? $phv->counsel_id : ($phv['counsel_id'] ?? ''));
                                             @endphp
                                             <option value="{{ $counsel->id }}" {{ $selectedCounsel == $counsel->id ? 'selected' : '' }}>
                                                 {{ $counsel->name }}
@@ -520,7 +705,7 @@
                                         </div>
                                         <input type="number" name="phvs[{{ $index }}][amount]"
                                                class="form-control @error('phvs.'.$index.'.amount') is-invalid @enderror"
-                                               value="{{ old('phvs.'.$index.'.amount') ?? ($phv['amount'] ?? '') }}"
+                                               value="{{ old('phvs.'.$index.'.amount') ?? (is_object($phv) && isset($phv->amount) ? $phv->amount : ($phv['amount'] ?? '')) }}"
                                                step="0.01" min="0" required>
                                         @error('phvs.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -534,7 +719,7 @@
                                     <label>Start Date <span class="text-danger">*</span></label>
                                     <input type="date" name="phvs[{{ $index }}][start_date]"
                                            class="form-control @error('phvs.'.$index.'.start_date') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.start_date') ?? (isset($phv['start_date']) ? \Carbon\Carbon::parse($phv['start_date'])->format('Y-m-d') : '') }}"
+                                           value="{{ old('phvs.'.$index.'.start_date') ?? (isset($phv['start_date']) ? \Carbon\Carbon::parse($phv['start_date'])->format('Y-m-d') : (is_object($phv) && $phv->start_date ? $phv->start_date->format('Y-m-d') : '')) }}"
                                            required>
                                     @error('phvs.'.$index.'.start_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -547,7 +732,7 @@
                                     <label>Expiry Date <span class="text-danger">*</span></label>
                                     <input type="date" name="phvs[{{ $index }}][expiry_date]"
                                            class="form-control @error('phvs.'.$index.'.expiry_date') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.expiry_date') ?? (isset($phv['expiry_date']) ? \Carbon\Carbon::parse($phv['expiry_date'])->format('Y-m-d') : '') }}"
+                                           value="{{ old('phvs.'.$index.'.expiry_date') ?? (isset($phv['expiry_date']) ? \Carbon\Carbon::parse($phv['expiry_date'])->format('Y-m-d') : (is_object($phv) && $phv->expiry_date ? $phv->expiry_date->format('Y-m-d') : '')) }}"
                                            required>
                                     @error('phvs.'.$index.'.expiry_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -560,7 +745,7 @@
                                     <label>Notify (days) <span class="text-danger">*</span></label>
                                     <input type="number" name="phvs[{{ $index }}][notify_before_expiry]"
                                            class="form-control @error('phvs.'.$index.'.notify_before_expiry') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.notify_before_expiry') ?? ($phv['notify_before_expiry'] ?? '') }}"
+                                           value="{{ old('phvs.'.$index.'.notify_before_expiry') ?? (is_object($phv) && isset($phv->notify_before_expiry) ? $phv->notify_before_expiry : ($phv['notify_before_expiry'] ?? '')) }}"
                                            min="1" required>
                                     @error('phvs.'.$index.'.notify_before_expiry')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -574,8 +759,8 @@
                                     <input type="file" name="phvs[{{ $index }}][document]"
                                            class="form-control @error('phvs.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
-                                    @if(isset($phv['document']) && $phv['document'])
-                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/phv_documents/' . $phv['document']) }}" target="_blank">View</a></small>
+                                    @if((is_object($phv) && $phv->document) || (isset($phv['document']) && $phv['document']))
+                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document'])) }}" target="_blank">View</a></small>
                                     @endif
                                     @error('phvs.'.$index.'.document')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -598,10 +783,81 @@
                         </div>
                     @endforeach
                 </div>
+                <div id="phv-preserved" class="d-none">
+                    @if($isCarEdit && $usePhvSplit && $phvsOlder->isNotEmpty())
+                        @php $hPhv = $phvHiddenStartIndex; @endphp
+                        @foreach($phvsOlder as $phvP)
+                            <div class="phv-preserved" data-record-id="{{ $phvP->id }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][id]" value="{{ $phvP->id }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][counsel_id]" value="{{ $phvP->counsel_id }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][amount]" value="{{ $phvP->amount }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][start_date]" value="{{ $phvP->start_date->format('Y-m-d') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][expiry_date]" value="{{ $phvP->expiry_date->format('Y-m-d') }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][notify_before_expiry]" value="{{ $phvP->notify_before_expiry }}">
+                            </div>
+                            @php $hPhv++; @endphp
+                        @endforeach
+                    @endif
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+@if($showPhvViewAll)
+<div class="modal fade" id="editPhvHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editPhvHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPhvHistoryModalLabel">Previous PHV records</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Counsel</th>
+                                <th>Start</th>
+                                <th>Expiry</th>
+                                <th>Amount</th>
+                                <th>Notify</th>
+                                <th>Document</th>
+                                <th class="text-right" style="width:80px">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($phvsOlder as $phvH)
+                            <tr data-hist-phv-id="{{ $phvH->id }}">
+                                <td>{{ $phvH->counsel->name ?? 'N/A' }}</td>
+                                <td>{{ $phvH->start_date->format('d M, Y') }}</td>
+                                <td>{{ $phvH->expiry_date->format('d M, Y') }}</td>
+                                <td>£{{ number_format($phvH->amount, 2) }}</td>
+                                <td>{{ $phvH->notify_before_expiry }} days</td>
+                                <td>
+                                    @if($phvH->document)
+                                        <a href="{{ asset('uploads/cars/phv_documents/' . $phvH->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                                <td class="text-right">
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCarHistoryPhv({{ $model->id }}, {{ $phvH->id }})" title="Delete">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Insurance Information Section - OPTIONAL --}}
 <div class="row mt-1">
@@ -734,9 +990,72 @@
 
 @push('js')
     <script>
-        let motIndex = {{ isset($mots) && is_countable($mots) ? count($mots) : 1 }};
-        let roadTaxIndex = {{ isset($roadTaxes) && is_countable($roadTaxes) ? count($roadTaxes) : 1 }};
-        let phvIndex = {{ isset($phvs) && is_countable($phvs) ? count($phvs) : 1 }};
+        let motIndex = {{ $motMainCount + ($useMotsSplit ? $motsOlder->count() : 0) }};
+        let roadTaxIndex = {{ $rtMainCount + ($useRoadTaxSplit ? $roadTaxesOlder->count() : 0) }};
+        let phvIndex = {{ $phvMainCount + ($usePhvSplit ? $phvsOlder->count() : 0) }};
+
+        const carsApiBase = {!! json_encode(url('/admin/cars')) !!};
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+        function deleteCarHistoryMot(carId, motId) {
+            if (!confirm('Delete this MOT record?')) return;
+            fetch(carsApiBase + '/' + carId + '/mots/' + motId, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            }).then(function (r) {
+                if (!r.ok) throw new Error();
+                return r.json();
+            }).then(function () {
+                window.location.reload();
+            }).catch(function () {
+                alert('Could not delete this record.');
+            });
+        }
+
+        function deleteCarHistoryRoadTax(carId, roadTaxId) {
+            if (!confirm('Delete this road tax record?')) return;
+            fetch(carsApiBase + '/' + carId + '/road-taxes/' + roadTaxId, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            }).then(function (r) {
+                if (!r.ok) throw new Error();
+                return r.json();
+            }).then(function () {
+                window.location.reload();
+            }).catch(function () {
+                alert('Could not delete this record.');
+            });
+        }
+
+        function deleteCarHistoryPhv(carId, phvId) {
+            if (!confirm('Delete this PHV record?')) return;
+            fetch(carsApiBase + '/' + carId + '/phvs/' + phvId, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            }).then(function (r) {
+                if (!r.ok) throw new Error();
+                return r.json();
+            }).then(function () {
+                window.location.reload();
+            }).catch(function () {
+                alert('Could not delete this record.');
+            });
+        }
 
         const todayYmd = new Date().toISOString().slice(0, 10);
 

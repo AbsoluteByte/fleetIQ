@@ -74,6 +74,9 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     // Main Features
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
+    Route::delete('cars/{car}/mots/{car_mot}', [App\Http\Controllers\Backend\CarController::class, 'destroyMot'])->name('cars.mots.destroy');
+    Route::delete('cars/{car}/road-taxes/{car_road_tax}', [App\Http\Controllers\Backend\CarController::class, 'destroyRoadTax'])->name('cars.road-taxes.destroy');
+    Route::delete('cars/{car}/phvs/{car_phv}', [App\Http\Controllers\Backend\CarController::class, 'destroyPhv'])->name('cars.phvs.destroy');
     Route::resource('cars', App\Http\Controllers\Backend\CarController::class);
     Route::resource('drivers', App\Http\Controllers\Backend\DriverController::class);
 
