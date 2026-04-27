@@ -14,6 +14,7 @@ use App\Models\AgreementCollection;
 use App\Models\InsurancePolicy;
 use App\Models\Claim;
 use App\Models\Expense;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 
@@ -289,17 +290,19 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 4. INSURANCE POLICIES ====================
-        $expiringInsurance = CarInsurance::with(['car'])
+        // ==================== 4. INSURANCE POLICIES (latest policy per car only) ====================
+        $insuranceRows = CarInsurance::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->whereRaw(
-                "expiry_date <= DATE_ADD(?, INTERVAL notify_before_expiry DAY)",
-                [now()]
-            )
-            ->orderBy('expiry_date')
             ->get();
+        $expiringInsurance = $this->latestInsurancePerCar($insuranceRows)
+            ->filter(function ($policy) {
+                $days = (int) ($policy->notify_before_expiry ?? 0);
+                return $policy->expiry_date <= now()->addDays($days);
+            })
+            ->sortBy('expiry_date')
+            ->values();
 
         foreach ($expiringInsurance as $policy) {
             $daysDiff = (int)now()->diffInDays($policy->expiry_date, false);
@@ -337,18 +340,19 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 5. PHV LICENSES ====================
-        $expiringPhvs = CarPhv::with(['car'])
+        // ==================== 5. PHV LICENSES (latest PHV per car only) ====================
+        $phvRows = CarPhv::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->whereRaw(
-                "expiry_date <= DATE_ADD(?, INTERVAL notify_before_expiry DAY)",
-                [now()]
-            )
-            ->orderBy('expiry_date')
             ->get();
-
+        $expiringPhvs = $this->latestPhvPerCar($phvRows)
+            ->filter(function ($phv) {
+                $days = (int) ($phv->notify_before_expiry ?? 0);
+                return $phv->expiry_date <= now()->addDays($days);
+            })
+            ->sortBy('expiry_date')
+            ->values();
 
         foreach ($expiringPhvs as $phv) {
             $daysDiff = (int)now()->diffInDays($phv->expiry_date, false);
@@ -386,14 +390,18 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 6. MOT CERTIFICATES ====================
-        $expiringMots = CarMot::with(['car'])
+        // ==================== 6. MOT CERTIFICATES (latest MOT per car only) ====================
+        $motRows = CarMot::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id);
             })
-            ->where('expiry_date', '<=', now()->addDays(30))
-            ->orderBy('expiry_date')
             ->get();
+        $expiringMots = $this->latestMotPerCar($motRows)
+            ->filter(function ($mot) {
+                return $mot->expiry_date <= now()->addDays(30);
+            })
+            ->sortBy('expiry_date')
+            ->values();
 
         foreach ($expiringMots as $mot) {
             $daysDiff = (int)now()->diffInDays($mot->expiry_date, false);
@@ -431,7 +439,7 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 7. ROAD TAX (exclude SORN: vehicle off the road) ====================
+        // ==================== 7. ROAD TAX — latest period per car (exclude SORN: vehicle off the road) ====================
         $allRoadTaxes = CarRoadTax::with(['car'])
             ->whereHas('car', function ($query) use ($tenant) {
                 $query->where('tenant_id', $tenant->id)
@@ -439,10 +447,12 @@ class DashboardController extends Controller
             })
             ->get();
 
-        $expiringRoadTaxes = $allRoadTaxes->filter(function ($roadTax) {
-            $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
-            return $expiryDate && $expiryDate <= now()->addDays(30);
-        });
+        $expiringRoadTaxes = $this->latestRoadTaxPerCar($allRoadTaxes)
+            ->filter(function ($roadTax) {
+                $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
+                return $expiryDate && $expiryDate <= now()->addDays(30);
+            })
+            ->values();
 
         foreach ($expiringRoadTaxes as $roadTax) {
             $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
@@ -683,6 +693,45 @@ class DashboardController extends Controller
         $summary = $data['summary'];
 
         return view($this->dir . 'payments', compact('summary'));
+    }
+
+    /**
+     * One row per car: same "current" record as car edit (latest expiry / latest start for tax).
+     */
+    private function latestMotPerCar(Collection $mots): Collection
+    {
+        return $mots->groupBy('car_id')->map(function ($group) {
+            return $group->sortByDesc(function ($m) {
+                return [optional($m->expiry_date)->timestamp ?? 0, $m->id];
+            })->first();
+        })->values();
+    }
+
+    private function latestPhvPerCar(Collection $phvs): Collection
+    {
+        return $phvs->groupBy('car_id')->map(function ($group) {
+            return $group->sortByDesc(function ($p) {
+                return [optional($p->expiry_date)->timestamp ?? 0, $p->id];
+            })->first();
+        })->values();
+    }
+
+    private function latestRoadTaxPerCar(Collection $roadTaxes): Collection
+    {
+        return $roadTaxes->groupBy('car_id')->map(function ($group) {
+            return $group->sortByDesc(function ($r) {
+                return [optional($r->start_date)->timestamp ?? 0, $r->id];
+            })->first();
+        })->values();
+    }
+
+    private function latestInsurancePerCar(Collection $policies): Collection
+    {
+        return $policies->groupBy('car_id')->map(function ($group) {
+            return $group->sortByDesc(function ($p) {
+                return [optional($p->expiry_date)->timestamp ?? 0, $p->id];
+            })->first();
+        })->values();
     }
 
     // ✅ Helper method: Calculate road tax expiry
