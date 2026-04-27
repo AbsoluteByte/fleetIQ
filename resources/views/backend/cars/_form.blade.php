@@ -948,23 +948,42 @@
 </div>
 @endif
 
+@php
+    $latestInsuranceForForm = null;
+    $olderInsurancesForModal = collect();
+    $showInsuranceViewAll = false;
+    if (isset($model) && $model->id && $model->insurances->isNotEmpty()) {
+        $olderInsurancesForModal = $model->insurances->count() > 1 ? $model->insurances->slice(1)->values() : collect();
+        $showInsuranceViewAll = $olderInsurancesForModal->isNotEmpty();
+        $latestInsuranceForForm = $model->insurances->first();
+    }
+@endphp
+
 {{-- Insurance Information Section - OPTIONAL --}}
 <div class="row mt-1">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        <i class="fa fa-shield-alt"></i> Insurance Information
-                    </h5>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
-                            {{ (old('has_insurance') ?? (isset($model) && $model->id && $model->insurances->count() > 0)) ? 'checked' : '' }}>
-                        <label class="form-check-label" for="has_insurance">
-                            <strong>Add Insurance</strong>
-                        </label>
+                <div class="d-flex flex-wrap justify-content-between align-items-center">
+                    <div class="d-flex flex-wrap align-items-center mb-1 mb-md-0">
+                        <h5 class="card-title mb-0 mr-3">
+                            <i class="fa fa-shield-alt"></i> Insurance Information
+                        </h5>
+                        <div class="form-check mb-0">
+                            <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
+                                {{ (old('has_insurance') ?? (isset($model) && $model->id && $model->insurances->count() > 0)) ? 'checked' : '' }}>
+                            <label class="form-check-label" for="has_insurance">
+                                <strong>Add Insurance</strong>
+                            </label>
+                        </div>
                     </div>
                 </div>
+
+                @if(isset($model) && $model->id && $showInsuranceViewAll)
+                    <button type="button" class="btn btn-sm btn-outline-primary mb-1 mb-md-0" data-toggle="modal" data-target="#editInsuranceHistoryModal">
+                        View All
+                    </button>
+                @endif
             </div>
             <div class="card-body" id="insurance-section" style="display: none;">
                 <div class="row">
@@ -976,7 +995,7 @@
                                 @foreach($insuranceProviders as $provider)
                                     <option value="{{ $provider->id }}"
                                             data-company-id="{{ $provider->company_id }}"
-                                        {{ (old('insurance_provider_id') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
+                                        {{ (old('insurance_provider_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
                                         {{ $provider->provider_name }}
                                     </option>
                                 @endforeach
@@ -994,7 +1013,7 @@
                                 <option value="">Select Status</option>
                                 @foreach($statuses as $status)
                                     <option value="{{ $status->id }}"
-                                        {{ (old('insurance_status_id') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->status_id : '')) == $status->id ? 'selected' : '' }}>
+                                        {{ (old('insurance_status_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->status_id : '')) == $status->id ? 'selected' : '' }}>
                                         {{ $status->name }}
                                     </option>
                                 @endforeach
@@ -1010,7 +1029,7 @@
                             <label for="insurance_start_date">Start Date</label>
                             <input type="date" name="insurance_start_date" id="insurance_start_date"
                                    class="form-control @error('insurance_start_date') is-invalid @enderror"
-                                   value="{{ old('insurance_start_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->start_date->format('Y-m-d') : '') }}">
+                                   value="{{ old('insurance_start_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->start_date->format('Y-m-d') : '') }}">
                             @error('insurance_start_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -1022,7 +1041,7 @@
                             <label for="insurance_expiry_date">Expiry Date</label>
                             <input type="date" name="insurance_expiry_date" id="insurance_expiry_date"
                                    class="form-control @error('insurance_expiry_date') is-invalid @enderror"
-                                   value="{{ old('insurance_expiry_date') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->expiry_date->format('Y-m-d') : '') }}">
+                                   value="{{ old('insurance_expiry_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->expiry_date->format('Y-m-d') : '') }}">
                             @error('insurance_expiry_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -1034,7 +1053,7 @@
                             <label for="insurance_notify_before_expiry">Notify Before Expiry (days)</label>
                             <input type="number" name="insurance_notify_before_expiry" id="insurance_notify_before_expiry"
                                    class="form-control @error('insurance_notify_before_expiry') is-invalid @enderror"
-                                   value="{{ old('insurance_notify_before_expiry') ?? (isset($model) && $model->id && $model->insurances->first() ? $model->insurances->first()->notify_before_expiry : '30') }}"
+                                   value="{{ old('insurance_notify_before_expiry') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->notify_before_expiry : '30') }}"
                                    min="1">
                             @error('insurance_notify_before_expiry')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -1048,8 +1067,8 @@
                             <input type="file" name="insurance_document" id="insurance_document"
                                    class="form-control @error('insurance_document') is-invalid @enderror"
                                    accept=".pdf,.jpg,.jpeg,.png">
-                            @if(isset($model) && $model->id && $model->insurances->first() && $model->insurances->first()->insurance_document)
-                                <small class="text-muted">Current: <a href="{{ asset('uploads/cars/insurance_documents/' . $model->insurances->first()->insurance_document) }}" target="_blank">View Document</a></small>
+                            @if($latestInsuranceForForm && $latestInsuranceForForm->insurance_document)
+                                <small class="text-muted">Current: <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsuranceForForm->insurance_document) }}" target="_blank">View Document</a></small>
                             @endif
                             @error('insurance_document')
                             <div class="invalid-feedback">{{ $message }}</div>
@@ -1061,6 +1080,55 @@
         </div>
     </div>
 </div>
+
+@if(isset($model) && $model->id && $showInsuranceViewAll)
+<div class="modal fade" id="editInsuranceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editInsuranceHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editInsuranceHistoryModalLabel">Previous insurance records</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Provider</th>
+                                <th>Start</th>
+                                <th>Expiry</th>
+                                <th>Status</th>
+                                <th>Notify (days)</th>
+                                <th>Document</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($olderInsurancesForModal as $insuranceH)
+                            <tr>
+                                <td>{{ $insuranceH->insuranceProvider->provider_name ?? '—' }}</td>
+                                <td>{{ $insuranceH->start_date->format('d M, Y') }}</td>
+                                <td>{{ $insuranceH->expiry_date->format('d M, Y') }}</td>
+                                <td>{{ $insuranceH->status->name ?? '—' }}</td>
+                                <td>{{ $insuranceH->notify_before_expiry }}</td>
+                                <td>
+                                    @if($insuranceH->insurance_document)
+                                        <a href="{{ asset('uploads/cars/insurance_documents/' . $insuranceH->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Submit Button --}}
 <div class="row mt-4">

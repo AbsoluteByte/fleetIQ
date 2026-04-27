@@ -385,17 +385,24 @@
                         @endif
 
                         <!-- Insurance Information -->
+                        @php
+                            $insurancesSorted = $car->insurances;
+                            $latestInsurance = $insurancesSorted->count() > 0 ? $insurancesSorted->first() : null;
+                            $olderInsurances = $insurancesSorted->count() > 1 ? $insurancesSorted->slice(1) : collect();
+                        @endphp
                         <div class="row mb-4">
-                            <div class="col-12">
-                                <h4 class="border-bottom pb-2 mb-3">Insurance Information</h4>
+                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
+                                <h4 class="mb-0">Insurance Information</h4>
+                                @if($olderInsurances->isNotEmpty())
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#showInsuranceHistoryModal">View All</button>
+                                @endif
                             </div>
-                            @if($car->insurances && $car->insurances->count() > 0)
+                            @if($latestInsurance)
                                 <div class="col-12">
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
-                                                <th>#</th>
                                                 <th>Provider</th>
                                                 <th>Start Date</th>
                                                 <th>Expiry Date</th>
@@ -405,21 +412,19 @@
                                             </tr>
                                             </thead>
                                             <tbody>
-                                            @foreach($car->insurances as $index => $insurance)
                                                 <tr>
-                                                    <td>{{ $index + 1 }}</td>
-                                                    <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($insurance->start_date)->format('d M, Y') }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($insurance->expiry_date)->format('d M, Y') }}</td>
-                                                    <td>{{ $insurance->notify_before_expiry }} days</td>
+                                                    <td>{{ $latestInsurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
+                                                    <td>{{ $latestInsurance->start_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestInsurance->expiry_date->format('d M, Y') }}</td>
+                                                    <td>{{ $latestInsurance->notify_before_expiry }} days</td>
                                                     <td>
-                                                    <span class="badge badge-{{ $insurance->status->name == 'Active' ? 'success' : 'warning' }}">
-                                                        {{ $insurance->status->name ?? 'N/A' }}
-                                                    </span>
+                                                        <span class="badge badge-{{ $latestInsurance->status && $latestInsurance->status->name == 'Active' ? 'success' : 'warning' }}">
+                                                            {{ $latestInsurance->status->name ?? 'N/A' }}
+                                                        </span>
                                                     </td>
                                                     <td>
-                                                        @if($insurance->insurance_document)
-                                                            <a href="{{ asset('uploads/cars/insurance_documents/' . $insurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                        @if($latestInsurance->insurance_document)
+                                                            <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -427,7 +432,6 @@
                                                         @endif
                                                     </td>
                                                 </tr>
-                                            @endforeach
                                             </tbody>
                                         </table>
                                     </div>
@@ -438,6 +442,52 @@
                                 </div>
                             @endif
                         </div>
+                        @if($olderInsurances->isNotEmpty())
+                        <div class="modal fade" id="showInsuranceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showInsuranceHistoryModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="showInsuranceHistoryModalLabel">Previous insurance records</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    </div>
+                                    <div class="modal-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered mb-0">
+                                                <thead class="thead-light">
+                                                    <tr>
+                                                        <th>Provider</th>
+                                                        <th>Start</th>
+                                                        <th>Expiry</th>
+                                                        <th>Notify</th>
+                                                        <th>Status</th>
+                                                        <th>Document</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($olderInsurances as $insurance)
+                                                    <tr>
+                                                        <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
+                                                        <td>{{ $insurance->start_date->format('d M, Y') }}</td>
+                                                        <td>{{ $insurance->expiry_date->format('d M, Y') }}</td>
+                                                        <td>{{ $insurance->notify_before_expiry }} days</td>
+                                                        <td>{{ $insurance->status->name ?? 'N/A' }}</td>
+                                                        <td>
+                                                            @if($insurance->insurance_document)
+                                                                <a href="{{ asset('uploads/cars/insurance_documents/' . $insurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                            @else
+                                                                <span class="text-muted">—</span>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
                         <!-- Timestamps -->
                         <div class="row">

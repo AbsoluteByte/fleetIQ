@@ -11,6 +11,7 @@ use App\Models\Company;
 use App\Models\Counsel;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -184,7 +185,7 @@ class CarController extends Controller
                 // Store Insurance
                 if ($request->has('has_insurance')) {
                     $insuranceData = [
-                        'car_id' => $car->id,
+                        'tenant_id' => $tenant->id,
                         'insurance_provider_id' => $validated['insurance_provider_id'],
                         'start_date' => $validated['insurance_start_date'],
                         'expiry_date' => $validated['insurance_expiry_date'],
@@ -241,7 +242,7 @@ class CarController extends Controller
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances', 'sornAppliedBy'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy'])
             ->findOrFail($id);
         $this->sortCarHistoryRelations($model);
 
@@ -339,8 +340,8 @@ class CarController extends Controller
                 $carData['updatedBy'] = Auth::id();
                 $car->update($carData);
 
-                // ... rest of your MOT, Road Tax, PHV, Insurance update code (keep as is)
-                // Your existing code is good, just continue with it
+                $car->load(['mots', 'phvs', 'insurances']);
+                $this->sortCarHistoryRelations($car);
 
                 // ==================== Update MOTs ====================
                 $existingMots = $car->mots->keyBy('id');
@@ -437,11 +438,11 @@ class CarController extends Controller
                 }
 
                 // ==================== Update Insurance ====================
-                $existingInsurance = $car->insurances->first();
+                $latestInsurance = $car->insurances->first();
 
                 if ($request->has('has_insurance')) {
                     $insuranceData = [
-                        'car_id' => $car->id,
+                        'tenant_id' => $tenant->id,
                         'insurance_provider_id' => $validated['insurance_provider_id'],
                         'start_date' => $validated['insurance_start_date'],
                         'expiry_date' => $validated['insurance_expiry_date'],
@@ -449,31 +450,38 @@ class CarController extends Controller
                         'status_id' => $validated['insurance_status_id'],
                     ];
 
+                    $newStart = Carbon::parse($validated['insurance_start_date'])->startOfDay();
+                    $newExpiry = Carbon::parse($validated['insurance_expiry_date'])->startOfDay();
+                    $periodChanged = ! $latestInsurance
+                        || ! $latestInsurance->start_date->copy()->startOfDay()->equalTo($newStart)
+                        || ! $latestInsurance->expiry_date->copy()->startOfDay()->equalTo($newExpiry);
+
                     if ($request->hasFile('insurance_document')) {
                         $insuranceData['insurance_document'] = $this->uploadFile(
                             $request->file('insurance_document'),
                             'uploads/cars/insurance_documents'
                         );
-
-                        if ($existingInsurance && $existingInsurance->insurance_document) {
-                            $this->deleteFile($existingInsurance->insurance_document, 'uploads/cars/insurance_documents');
+                        if (! $periodChanged && $latestInsurance && $latestInsurance->insurance_document) {
+                            $this->deleteFile($latestInsurance->insurance_document, 'uploads/cars/insurance_documents');
                         }
-                    } elseif ($existingInsurance && $existingInsurance->insurance_document) {
-                        $insuranceData['insurance_document'] = $existingInsurance->insurance_document;
+                    } elseif ($latestInsurance && $latestInsurance->insurance_document) {
+                        $insuranceData['insurance_document'] = $latestInsurance->insurance_document;
                     }
 
-                    if ($existingInsurance) {
-                        $existingInsurance->update($insuranceData);
+                    if ($periodChanged) {
+                        $car->insurances()->create($insuranceData);
+                    } elseif ($latestInsurance) {
+                        $latestInsurance->update($insuranceData);
                     } else {
                         $car->insurances()->create($insuranceData);
                     }
                 } else {
-                    if ($existingInsurance) {
-                        if ($existingInsurance->insurance_document) {
-                            $this->deleteFile($existingInsurance->insurance_document, 'uploads/cars/insurance_documents');
+                    foreach ($car->insurances as $insuranceRow) {
+                        if ($insuranceRow->insurance_document) {
+                            $this->deleteFile($insuranceRow->insurance_document, 'uploads/cars/insurance_documents');
                         }
-                        $existingInsurance->delete();
                     }
+                    $car->insurances()->delete();
                 }
 
                 return $car;
@@ -545,6 +553,13 @@ class CarController extends Controller
             })
             ->values();
         $car->setRelation('phvs', $phvs);
+
+        $insurances = $car->insurances
+            ->sortByDesc(function ($i) {
+                return [optional($i->expiry_date)->timestamp ?? 0, $i->id];
+            })
+            ->values();
+        $car->setRelation('insurances', $insurances);
     }
 
     public function applySorn(Car $car)

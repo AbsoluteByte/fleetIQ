@@ -123,7 +123,7 @@ class Car extends Model
     public function isInsuranceCurrentlyActive(): bool
     {
         $insurance = $this->insurances
-            ->sortByDesc(fn (CarInsurance $i) => optional($i->expiry_date)->timestamp ?? 0)
+            ->sortByDesc(fn (CarInsurance $i) => [optional($i->expiry_date)->timestamp ?? 0, $i->id])
             ->first();
 
         if (! $insurance?->status || ! $insurance->expiry_date) {
