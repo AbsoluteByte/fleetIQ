@@ -804,11 +804,11 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Counsel <span class="text-danger">*</span></label>
+                                    <label>Council <span class="text-danger">*</span></label>
                                     <select name="phvs[{{ $index }}][counsel_id]"
                                             class="form-control @error('phvs.'.$index.'.counsel_id') is-invalid @enderror"
                                             required>
-                                        <option value="">Select Counsel</option>
+                                        <option value="">Select Council</option>
                                         @foreach($counsels as $counsel)
                                             @php
                                                 $selectedCounsel = old('phvs.'.$index.'.counsel_id') ?? (is_object($phv) && isset($phv->counsel_id) ? $phv->counsel_id : ($phv['counsel_id'] ?? ''));
@@ -979,7 +979,7 @@
                     <table class="table table-bordered mb-0">
                         <thead class="thead-light">
                             <tr>
-                                <th>Counsel</th>
+                                <th>Council</th>
                                 <th>Start</th>
                                 <th>Expiry</th>
                                 <th>Amount</th>
@@ -1062,7 +1062,7 @@
                         View All
                     </button>
                 @endif
-                
+
             </div>
             <div class="card-body" id="insurance-section" style="display: none;">
                 <div class="row">
@@ -1693,7 +1693,7 @@
         return ['id' => $counsel->id, 'name' => $counsel->name];
     }));
 
-            let counselOptionsHtml = '<option value="">Select Counsel</option>';
+            let counselOptionsHtml = '<option value="">Select Council</option>';
             counselOptions.forEach(counsel => {
                 counselOptionsHtml += `<option value="${counsel.id}">${counsel.name}</option>`;
             });
@@ -1702,7 +1702,7 @@
         <div class="phv-item row border-bottom pb-3 mb-1" data-index="${phvIndex}">
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Counsel <span class="text-danger">*</span></label>
+                    <label>Council <span class="text-danger">*</span></label>
                     <select name="phvs[${phvIndex}][counsel_id]" class="form-control" required>
                         ${counselOptionsHtml}
                     </select>

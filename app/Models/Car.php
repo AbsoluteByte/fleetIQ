@@ -118,7 +118,7 @@ class Car extends Model
     }
 
     /**
-     * Counsel name from the PHV row with the latest expiry date (current or most recent).
+     * Council name from the PHV row with the latest expiry date (current or most recent).
      */
     public function latestPhvCounselName(): ?string
     {

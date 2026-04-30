@@ -30,7 +30,7 @@
                                         <th>Model</th>
                                         <th>Color</th>
                                         <th>Status</th>
-                                        <th>PHV Counsel</th>
+                                        <th>PHV Council</th>
                                         <th>Insurance Status</th>
                                         <th>Actions</th>
                                     </tr>

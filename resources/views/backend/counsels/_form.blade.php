@@ -4,7 +4,7 @@
         <input type="text" name="name" id="name"
                class="form-control @error('name') is-invalid @enderror"
                value="{{ old('name') ?? ($model->name ?? '') }}"
-               placeholder="Enter Car Model Name" required>
+               placeholder="Enter Council Name" required>
         @error('name')
         <div class="invalid-feedback">{{ $message }}</div>
         @enderror
@@ -17,7 +17,7 @@
         <div class="form-group">
             <button type="submit" class="btn btn-primary">
                 <i class="fa fa-save"></i>
-                {{ isset($model->id) ? 'Update Counsels' : 'Create Counsels' }}
+                {{ isset($model->id) ? 'Update Council' : 'Create Council' }}
             </button>
             <a href="{{ route($url . 'index') }}" class="btn btn-secondary ml-2">
                 <i class="fa fa-times"></i> Cancel

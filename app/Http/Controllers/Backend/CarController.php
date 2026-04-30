@@ -704,7 +704,7 @@ class CarController extends Controller
             ->with(['company', 'carModel', 'phvs.counsel', 'insurances.status', 'services', 'reservations', 'agreements'])
             ->get()
             ->filter(fn (Car $car) => $car->isAvailableForRent())
-            ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Counsel');
+            ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Council');
 
         return view($this->dir . 'available-by-phv', compact('cars'));
     }

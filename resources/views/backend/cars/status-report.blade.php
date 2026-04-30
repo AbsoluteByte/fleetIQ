@@ -20,7 +20,7 @@
                                         <th>Registration</th>
                                         <th>Company</th>
                                         <th>Model</th>
-                                        <th>PHV Counsel</th>
+                                        <th>PHV Council</th>
                                         <th>Available From</th>
                                         <th>Reservation</th>
                                         <th>Actions</th>

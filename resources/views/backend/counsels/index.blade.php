@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'Counsels'])
+@extends('layouts.admin', ['title' => 'Councils'])
 @section('content')
     <section id="basic-datatable">
         <div class="row">
@@ -50,7 +50,7 @@
                                             <td colspan="8" class="text-center text-muted py-4">
                                                 <i class="fa fa-handshake fa-3x mb-3"></i>
                                                 <br>
-                                                No Councils  found. <a href="{{ route('counsels.create') }}">Create your first agreement</a>
+                                                No Councils found. <a href="{{ route('counsels.create') }}">Create your first council</a>
                                             </td>
                                         </tr>
                                     @endforelse

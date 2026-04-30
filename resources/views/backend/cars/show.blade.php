@@ -310,7 +310,7 @@
                                         <table class="table table-bordered table-hover">
                                             <thead class="thead-light">
                                             <tr>
-                                                <th>Counsel</th>
+                                                <th>Council</th>
                                                 <th>Start Date</th>
                                                 <th>Expiry Date</th>
                                                 <th>Amount</th>
@@ -368,7 +368,7 @@
                                             <table class="table table-bordered mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
-                                                        <th>Counsel</th>
+                                                        <th>Council</th>
                                                         <th>Start</th>
                                                         <th>Expiry</th>
                                                         <th>Amount</th>

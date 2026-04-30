@@ -11,7 +11,7 @@ class CounselController extends Controller
 {
     protected $url = 'counsels.';
     protected $dir = 'backend.counsels.';
-    protected $name = 'Counsels';
+    protected $name = 'Councils';
 
     public function __construct()
     {
@@ -52,7 +52,7 @@ class CounselController extends Controller
         Counsel::create($validated);
 
         return redirect()->route('counsels.index')
-            ->with('success', 'Counsel created successfully.');
+            ->with('success', 'Council created successfully.');
     }
 
     public function edit($id)
@@ -78,7 +78,7 @@ class CounselController extends Controller
         $counsel->update($validated);
 
         return redirect()->route('counsels.index')
-            ->with('success', 'Counsel updated successfully.');
+            ->with('success', 'Council updated successfully.');
     }
 
     public function destroy(Counsel $counsel)
@@ -92,6 +92,6 @@ class CounselController extends Controller
         $counsel->delete();
 
         return redirect()->route('counsels.index')
-            ->with('success', 'Counsel deleted successfully.');
+            ->with('success', 'Council deleted successfully.');
     }
 }
