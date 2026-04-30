@@ -70,6 +70,15 @@ class CounselController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
+        if (!$tenant) {
+            return redirect()->route('dashboard')
+                ->with('error', 'No active company found!');
+        }
+
+        if ($counsel->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:counsels,name,' . $counsel->id,
         ]);

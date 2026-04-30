@@ -47,7 +47,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">
+                                            <td colspan="2" class="text-center text-muted py-4">
                                                 <i class="fa fa-handshake fa-3x mb-3"></i>
                                                 <br>
                                                 No Councils found. <a href="{{ route('counsels.create') }}">Create your first council</a>
