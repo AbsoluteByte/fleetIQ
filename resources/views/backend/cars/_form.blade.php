@@ -239,6 +239,51 @@
         </div>
     </div>
 
+    @php
+        $latestFuturePhv = null;
+        if (isset($model) && $model->id && $model->phvs->isNotEmpty()) {
+            $latestFuturePhv = $model->phvs
+                ->filter(fn ($phv) => $phv->expiry_date && $phv->expiry_date->copy()->startOfDay()->gte(now()->startOfDay()))
+                ->sortByDesc(fn ($phv) => [$phv->expiry_date->timestamp, $phv->id])
+                ->first();
+        }
+        $phvStatus = old('phv_status', isset($model) && $model->id ? ($model->phv_status ?? 'need_to_apply') : 'need_to_apply');
+        $showPhvStatusControls = $phvStatus !== 'phv_active'
+            || ! $latestFuturePhv
+            || $latestFuturePhv->expiry_date->copy()->startOfDay()->lte(now()->addMonth()->startOfDay());
+        $phvAppliedDate = old('phv_applied_date');
+        if ($phvAppliedDate === null) {
+            $phvAppliedDate = isset($model) && $model->id && $model->phv_applied_date
+                ? $model->phv_applied_date->format('Y-m-d')
+                : '';
+        }
+    @endphp
+    <div class="col-md-6" id="phv-status-wrapper" style="display: {{ $showPhvStatusControls ? 'block' : 'none' }};">
+        <div class="form-group">
+            <label for="phv_status">PHV Status</label>
+            <select name="phv_status" id="phv_status" class="form-control @error('phv_status') is-invalid @enderror">
+                <option value="need_to_apply" {{ $phvStatus === 'need_to_apply' ? 'selected' : '' }}>Need to Apply</option>
+                <option value="applied" {{ $phvStatus === 'applied' ? 'selected' : '' }}>Applied</option>
+                <option value="phv_active" {{ $phvStatus === 'phv_active' ? 'selected' : '' }}>PHV Active</option>
+            </select>
+            @error('phv_status')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
+    <div class="col-md-6" id="phv-applied-date-wrapper" style="display: {{ $showPhvStatusControls && $phvStatus === 'applied' ? 'block' : 'none' }};">
+        <div class="form-group">
+            <label for="phv_applied_date">PHV Applied Date</label>
+            <input type="date" name="phv_applied_date" id="phv_applied_date"
+                class="form-control @error('phv_applied_date') is-invalid @enderror"
+                value="{{ $phvAppliedDate }}">
+            @error('phv_applied_date')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
     <div class="col-12" id="damaged-notes-wrapper" style="display: {{ $fleetStatus === 'damaged' ? 'block' : 'none' }};">
         <div class="form-group">
             <label for="damaged_notes">Damaged Notes</label>
@@ -354,11 +399,10 @@
 
                             <div class="col-md-3">
                                 <div class="form-group">
-                                    <label>Expiry Date <span class="text-danger">*</span></label>
+                                    <label>Expiry Date</label>
                                     <input type="date" name="mots[{{ $index }}][expiry_date]"
                                            class="form-control @error('mots.'.$index.'.expiry_date') is-invalid @enderror"
-                                           value="{{ old('mots.'.$index.'.expiry_date') ?? (isset($mot['expiry_date']) ? \Carbon\Carbon::parse($mot['expiry_date'])->format('Y-m-d') : '') }}"
-                                           required>
+                                           value="{{ old('mots.'.$index.'.expiry_date') ?? (isset($mot['expiry_date']) ? \Carbon\Carbon::parse($mot['expiry_date'])->format('Y-m-d') : '') }}">
                                     @error('mots.'.$index.'.expiry_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -367,7 +411,7 @@
 
                             <div class="col-md-3">
                                 <div class="form-group">
-                                    <label>Amount <span class="text-danger">*</span></label>
+                                    <label>Amount</label>
                                     <div class="input-group">
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">£</span>
@@ -375,7 +419,7 @@
                                         <input type="number" name="mots[{{ $index }}][amount]"
                                                class="form-control @error('mots.'.$index.'.amount') is-invalid @enderror"
                                                value="{{ old('mots.'.$index.'.amount') ?? (is_object($mot) && isset($mot->amount) ? $mot->amount : ($mot['amount'] ?? '')) }}"
-                                               step="0.01" min="0" required>
+                                               step="0.01" min="0">
                                         @error('mots.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
@@ -385,11 +429,11 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Term <span class="text-danger">*</span></label>
+                                    <label>Term</label>
                                     <input type="text" name="mots[{{ $index }}][term]"
                                            class="form-control @error('mots.'.$index.'.term') is-invalid @enderror"
                                            value="{{ old('mots.'.$index.'.term') ?? (is_object($mot) && isset($mot->term) ? $mot->term : ($mot['term'] ?? '')) }}"
-                                           placeholder="e.g. 12 months" required>
+                                           placeholder="e.g. 12 months">
                                     @error('mots.'.$index.'.term')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -561,11 +605,10 @@
                         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="{{ $index }}">
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label>Start Date <span class="text-danger">*</span></label>
+                                    <label>Start Date</label>
                                     <input type="date" name="road_taxes[{{ $index }}][start_date]"
                                            class="form-control @error('road_taxes.'.$index.'.start_date') is-invalid @enderror"
-                                           value="{{ old('road_taxes.'.$index.'.start_date') ?? (isset($roadTax['start_date']) ? \Carbon\Carbon::parse($roadTax['start_date'])->format('Y-m-d') : '') }}"
-                                           required>
+                                           value="{{ old('road_taxes.'.$index.'.start_date') ?? (isset($roadTax['start_date']) ? \Carbon\Carbon::parse($roadTax['start_date'])->format('Y-m-d') : '') }}">
                                     @error('road_taxes.'.$index.'.start_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -574,10 +617,9 @@
 
                             <div class="col-md-3">
                                 <div class="form-group">
-                                    <label>Term <span class="text-danger">*</span></label>
+                                    <label>Term</label>
                                     <select name="road_taxes[{{ $index }}][term]"
-                                            class="form-control @error('road_taxes.'.$index.'.term') is-invalid @enderror"
-                                            required>
+                                            class="form-control @error('road_taxes.'.$index.'.term') is-invalid @enderror">
                                         <option value="">Select Term</option>
                                         @php
                                             $selectedTerm = old('road_taxes.'.$index.'.term') ?? (is_object($roadTax) && isset($roadTax->term) ? $roadTax->term : ($roadTax['term'] ?? ''));
@@ -593,7 +635,7 @@
 
                             <div class="col-md-3">
                                 <div class="form-group">
-                                    <label>Amount <span class="text-danger">*</span></label>
+                                    <label>Amount</label>
                                     <div class="input-group">
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">£</span>
@@ -601,7 +643,7 @@
                                         <input type="number" name="road_taxes[{{ $index }}][amount]"
                                                class="form-control @error('road_taxes.'.$index.'.amount') is-invalid @enderror"
                                                value="{{ old('road_taxes.'.$index.'.amount') ?? (is_object($roadTax) && isset($roadTax->amount) ? $roadTax->amount : ($roadTax['amount'] ?? '')) }}"
-                                               step="0.01" min="0" required>
+                                               step="0.01" min="0">
                                         @error('road_taxes.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
@@ -815,10 +857,9 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Council <span class="text-danger">*</span></label>
+                                    <label>Council</label>
                                     <select name="phvs[{{ $index }}][counsel_id]"
-                                            class="form-control @error('phvs.'.$index.'.counsel_id') is-invalid @enderror"
-                                            required>
+                                            class="form-control @error('phvs.'.$index.'.counsel_id') is-invalid @enderror">
                                         <option value="">Select Council</option>
                                         @foreach($counsels as $counsel)
                                             @php
@@ -837,7 +878,7 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Amount <span class="text-danger">*</span></label>
+                                    <label>Amount</label>
                                     <div class="input-group">
                                         <div class="input-group-prepend">
                                             <span class="input-group-text">£</span>
@@ -845,7 +886,7 @@
                                         <input type="number" name="phvs[{{ $index }}][amount]"
                                                class="form-control @error('phvs.'.$index.'.amount') is-invalid @enderror"
                                                value="{{ old('phvs.'.$index.'.amount') ?? (is_object($phv) && isset($phv->amount) ? $phv->amount : ($phv['amount'] ?? '')) }}"
-                                               step="0.01" min="0" required>
+                                               step="0.01" min="0">
                                         @error('phvs.'.$index.'.amount')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
@@ -855,11 +896,10 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Start Date <span class="text-danger">*</span></label>
+                                    <label>Start Date</label>
                                     <input type="date" name="phvs[{{ $index }}][start_date]"
                                            class="form-control @error('phvs.'.$index.'.start_date') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.start_date') ?? (isset($phv['start_date']) ? \Carbon\Carbon::parse($phv['start_date'])->format('Y-m-d') : (is_object($phv) && $phv->start_date ? $phv->start_date->format('Y-m-d') : '')) }}"
-                                           required>
+                                           value="{{ old('phvs.'.$index.'.start_date') ?? (isset($phv['start_date']) ? \Carbon\Carbon::parse($phv['start_date'])->format('Y-m-d') : (is_object($phv) && $phv->start_date ? $phv->start_date->format('Y-m-d') : '')) }}">
                                     @error('phvs.'.$index.'.start_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -868,11 +908,10 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Expiry Date <span class="text-danger">*</span></label>
+                                    <label>Expiry Date</label>
                                     <input type="date" name="phvs[{{ $index }}][expiry_date]"
                                            class="form-control @error('phvs.'.$index.'.expiry_date') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.expiry_date') ?? (isset($phv['expiry_date']) ? \Carbon\Carbon::parse($phv['expiry_date'])->format('Y-m-d') : (is_object($phv) && $phv->expiry_date ? $phv->expiry_date->format('Y-m-d') : '')) }}"
-                                           required>
+                                           value="{{ old('phvs.'.$index.'.expiry_date') ?? (isset($phv['expiry_date']) ? \Carbon\Carbon::parse($phv['expiry_date'])->format('Y-m-d') : (is_object($phv) && $phv->expiry_date ? $phv->expiry_date->format('Y-m-d') : '')) }}">
                                     @error('phvs.'.$index.'.expiry_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -881,11 +920,11 @@
 
                             <div class="col-md-2">
                                 <div class="form-group">
-                                    <label>Notify (days) <span class="text-danger">*</span></label>
+                                    <label>Notify (days)</label>
                                     <input type="number" name="phvs[{{ $index }}][notify_before_expiry]"
                                            class="form-control @error('phvs.'.$index.'.notify_before_expiry') is-invalid @enderror"
                                            value="{{ old('phvs.'.$index.'.notify_before_expiry') ?? (is_object($phv) && isset($phv->notify_before_expiry) ? $phv->notify_before_expiry : ($phv['notify_before_expiry'] ?? '')) }}"
-                                           min="1" required>
+                                           min="1">
                                     @error('phvs.'.$index.'.notify_before_expiry')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -908,30 +947,6 @@
                                         </small>
                                     @endif
                                     @error('phvs.'.$index.'.document')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-                            </div>
-
-                            <div class="col-md-3">
-                                <div class="form-group mb-2">
-                                    <label>&nbsp;</label>
-                                    <div class="form-check">
-                                        <input type="checkbox" class="form-check-input phv-applied-checkbox"
-                                               name="phvs[{{ $index }}][phv_applied]" value="1"
-                                               {{ old('phvs.'.$index.'.phv_applied', is_object($phv) && ($phv->phv_applied ?? false)) ? 'checked' : '' }}>
-                                        <label class="form-check-label">PHV applied</label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label>PHV Applied Date</label>
-                                    <input type="date" name="phvs[{{ $index }}][phv_applied_date]"
-                                           class="form-control phv-applied-date @error('phvs.'.$index.'.phv_applied_date') is-invalid @enderror"
-                                           value="{{ old('phvs.'.$index.'.phv_applied_date') ?? (is_object($phv) && $phv->phv_applied_date ? $phv->phv_applied_date->format('Y-m-d') : '') }}">
-                                    @error('phvs.'.$index.'.phv_applied_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -1532,19 +1547,6 @@
             toggleReservationSection();
         }
 
-        function bindPhvAppliedDefaults(scope) {
-            (scope || document).querySelectorAll('.phv-applied-checkbox').forEach(function (checkbox) {
-                checkbox.addEventListener('change', function () {
-                    const row = checkbox.closest('.phv-item');
-                    const dateInput = row ? row.querySelector('.phv-applied-date') : null;
-                    if (checkbox.checked && dateInput && !dateInput.value) {
-                        dateInput.value = todayYmd;
-                    }
-                });
-                checkbox.dispatchEvent(new Event('change'));
-            });
-        }
-
         function preventEnterFormSubmit() {
             const submitButton = document.querySelector('button[type="submit"]');
             const form = submitButton ? submitButton.closest('form') : null;
@@ -1562,6 +1564,45 @@
                 if (!isTextArea && !isButton) {
                     event.preventDefault();
                 }
+            });
+        }
+
+        function togglePhvStatusFields() {
+            const phvStatus = document.getElementById('phv_status');
+            const appliedDateWrapper = document.getElementById('phv-applied-date-wrapper');
+            if (!phvStatus || !appliedDateWrapper) return;
+
+            appliedDateWrapper.style.display = phvStatus.value === 'applied' ? 'block' : 'none';
+        }
+
+        function hidePhvStatusForNewActiveLicense(expiryInput) {
+            const row = expiryInput.closest('.phv-item');
+            const isExistingRow = row && row.querySelector('input[type="hidden"][name$="[id]"]');
+            if (isExistingRow || !expiryInput.value) return;
+
+            const expiryDate = new Date(expiryInput.value + 'T00:00:00');
+            const today = new Date(todayYmd + 'T00:00:00');
+            if (expiryDate < today) return;
+
+            const phvStatus = document.getElementById('phv_status');
+            const statusWrapper = document.getElementById('phv-status-wrapper');
+            const appliedDateWrapper = document.getElementById('phv-applied-date-wrapper');
+            if (phvStatus) {
+                phvStatus.value = 'phv_active';
+            }
+            if (statusWrapper) {
+                statusWrapper.style.display = 'none';
+            }
+            if (appliedDateWrapper) {
+                appliedDateWrapper.style.display = 'none';
+            }
+        }
+
+        function bindPhvExpiryStatusAutomation(scope) {
+            (scope || document).querySelectorAll('.phv-item input[name$="[expiry_date]"]').forEach(function (expiryInput) {
+                expiryInput.addEventListener('change', function () {
+                    hidePhvStatusForNewActiveLicense(expiryInput);
+                });
             });
         }
 
@@ -1626,7 +1667,8 @@
             toggleLogBookSection();
             toggleDamagedStatusSections();
             toggleReservationSection();
-            bindPhvAppliedDefaults(document);
+            togglePhvStatusFields();
+            bindPhvExpiryStatusAutomation(document);
             preventEnterFormSubmit();
             (function defaultEmptyAppliedDate() {
                 const dateInput = document.getElementById('log_book_applied_date');
@@ -1641,6 +1683,7 @@
             document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
             document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
             document.getElementById('fleet_status').addEventListener('change', toggleDamagedStatusSections);
+            document.getElementById('phv_status').addEventListener('change', togglePhvStatusFields);
         });
 
         function addMOT() {
@@ -1649,25 +1692,25 @@
         <div class="mot-item row border-bottom pb-3 mb-1" data-index="${motIndex}">
             <div class="col-md-3">
                 <div class="form-group">
-                    <label>Expiry Date <span class="text-danger">*</span></label>
-                    <input type="date" name="mots[${motIndex}][expiry_date]" class="form-control" required>
+                    <label>Expiry Date</label>
+                    <input type="date" name="mots[${motIndex}][expiry_date]" class="form-control">
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="form-group">
-                    <label>Amount <span class="text-danger">*</span></label>
+                    <label>Amount</label>
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text">£</span>
                         </div>
-                        <input type="number" name="mots[${motIndex}][amount]" class="form-control" step="0.01" min="0" required>
+                        <input type="number" name="mots[${motIndex}][amount]" class="form-control" step="0.01" min="0">
                     </div>
                 </div>
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Term <span class="text-danger">*</span></label>
-                    <input type="text" name="mots[${motIndex}][term]" class="form-control" placeholder="e.g. 12 months" required>
+                    <label>Term</label>
+                    <input type="text" name="mots[${motIndex}][term]" class="form-control" placeholder="e.g. 12 months">
                 </div>
             </div>
             <div class="col-md-3">
@@ -1702,14 +1745,14 @@
         <div class="roadtax-item row border-bottom pb-3 mb-1" data-index="${roadTaxIndex}">
             <div class="col-md-4">
                 <div class="form-group">
-                    <label>Start Date <span class="text-danger">*</span></label>
-                    <input type="date" name="road_taxes[${roadTaxIndex}][start_date]" class="form-control" required>
+                    <label>Start Date</label>
+                    <input type="date" name="road_taxes[${roadTaxIndex}][start_date]" class="form-control">
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="form-group">
-                    <label>Term <span class="text-danger">*</span></label>
-                    <select name="road_taxes[${roadTaxIndex}][term]" class="form-control" required>
+                    <label>Term</label>
+                    <select name="road_taxes[${roadTaxIndex}][term]" class="form-control">
                         <option value="">Select Term</option>
                         <option value="6 months">6 Months</option>
                         <option value="12 months">12 Months</option>
@@ -1718,12 +1761,12 @@
             </div>
             <div class="col-md-3">
                 <div class="form-group">
-                    <label>Amount <span class="text-danger">*</span></label>
+                    <label>Amount</label>
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text">£</span>
                         </div>
-                        <input type="number" name="road_taxes[${roadTaxIndex}][amount]" class="form-control" step="0.01" min="0" required>
+                        <input type="number" name="road_taxes[${roadTaxIndex}][amount]" class="form-control" step="0.01" min="0">
                     </div>
                 </div>
             </div>
@@ -1762,60 +1805,45 @@
         <div class="phv-item row border-bottom pb-3 mb-1" data-index="${phvIndex}">
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Council <span class="text-danger">*</span></label>
-                    <select name="phvs[${phvIndex}][counsel_id]" class="form-control" required>
+                    <label>Council</label>
+                    <select name="phvs[${phvIndex}][counsel_id]" class="form-control">
                         ${counselOptionsHtml}
                     </select>
                 </div>
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Amount <span class="text-danger">*</span></label>
+                    <label>Amount</label>
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text">£</span>
                         </div>
-                        <input type="number" name="phvs[${phvIndex}][amount]" class="form-control" step="0.01" min="0" required>
+                        <input type="number" name="phvs[${phvIndex}][amount]" class="form-control" step="0.01" min="0">
                     </div>
                 </div>
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Start Date <span class="text-danger">*</span></label>
-                    <input type="date" name="phvs[${phvIndex}][start_date]" class="form-control" required>
+                    <label>Start Date</label>
+                    <input type="date" name="phvs[${phvIndex}][start_date]" class="form-control">
                 </div>
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Expiry Date <span class="text-danger">*</span></label>
-                    <input type="date" name="phvs[${phvIndex}][expiry_date]" class="form-control" required>
+                    <label>Expiry Date</label>
+                    <input type="date" name="phvs[${phvIndex}][expiry_date]" class="form-control">
                 </div>
             </div>
             <div class="col-md-2">
                 <div class="form-group">
-                    <label>Notify (days) <span class="text-danger">*</span></label>
-                    <input type="number" name="phvs[${phvIndex}][notify_before_expiry]" class="form-control" min="1" required>
+                    <label>Notify (days)</label>
+                    <input type="number" name="phvs[${phvIndex}][notify_before_expiry]" class="form-control" min="1">
                 </div>
             </div>
             <div class="col-md-1">
                 <div class="form-group">
                     <label>Document</label>
                     <input type="file" name="phvs[${phvIndex}][document]" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-group mb-2">
-                    <label>&nbsp;</label>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input phv-applied-checkbox" name="phvs[${phvIndex}][phv_applied]" value="1">
-                        <label class="form-check-label">PHV applied</label>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-group">
-                    <label>PHV Applied Date</label>
-                    <input type="date" name="phvs[${phvIndex}][phv_applied_date]" class="form-control phv-applied-date">
                 </div>
             </div>
             <div class="col-md-1">
@@ -1831,7 +1859,7 @@
         </div>
     `;
             container.insertAdjacentHTML('beforeend', newPHV);
-            bindPhvAppliedDefaults(container.lastElementChild);
+            bindPhvExpiryStatusAutomation(container.lastElementChild);
             phvIndex++;
         }
 

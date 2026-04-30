@@ -109,6 +109,8 @@ class CarController extends Controller
             'seller_name' => 'nullable|string|max:255',
             'seller_notes' => 'nullable|string',
             'damaged_notes' => 'nullable|string',
+            'phv_status' => 'nullable|in:need_to_apply,applied,phv_active',
+            'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -126,20 +128,20 @@ class CarController extends Controller
             'reservation_available_from_date' => 'nullable|date',
             'reservation_terms_conditions' => 'nullable|string',
 
-            'mots.*.expiry_date' => 'required|date',
-            'mots.*.amount' => 'required|numeric|min:0',
-            'mots.*.term' => 'required|string',
+            'mots.*.expiry_date' => 'nullable|date',
+            'mots.*.amount' => 'nullable|numeric|min:0',
+            'mots.*.term' => 'nullable|string',
             'mots.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
-            'road_taxes.*.start_date' => 'required|date',
-            'road_taxes.*.term' => 'required|string',
-            'road_taxes.*.amount' => 'required|numeric|min:0',
+            'road_taxes.*.start_date' => 'nullable|date',
+            'road_taxes.*.term' => 'nullable|string',
+            'road_taxes.*.amount' => 'nullable|numeric|min:0',
 
-            'phvs.*.counsel_id' => 'required|exists:counsels,id',
-            'phvs.*.amount' => 'required|numeric|min:0',
-            'phvs.*.start_date' => 'required|date',
-            'phvs.*.expiry_date' => 'required|date',
-            'phvs.*.notify_before_expiry' => 'required|integer|min:1',
+            'phvs.*.counsel_id' => 'nullable|exists:counsels,id',
+            'phvs.*.amount' => 'nullable|numeric|min:0',
+            'phvs.*.start_date' => 'nullable|date',
+            'phvs.*.expiry_date' => 'nullable|date',
+            'phvs.*.notify_before_expiry' => 'nullable|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'phvs.*.phv_applied' => 'nullable|boolean',
             'phvs.*.phv_applied_date' => 'nullable|date',
@@ -173,6 +175,10 @@ class CarController extends Controller
                 // Store MOTs
                 if ($request->has('mots')) {
                     foreach ($request->input('mots') as $index => $motData) {
+                        if (! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                            continue;
+                        }
+
                         if ($request->hasFile("mots.{$index}.document")) {
                             $motData['document'] = $this->uploadFile(
                                 $request->file("mots.{$index}.document"),
@@ -186,13 +192,22 @@ class CarController extends Controller
                 // Store Road Taxes
                 if ($request->has('road_taxes')) {
                     foreach ($request->input('road_taxes') as $roadTaxData) {
+                        if (! $this->historyRowHasValues($roadTaxData, ['start_date', 'term', 'amount'])) {
+                            continue;
+                        }
+
                         $car->roadTaxes()->create($roadTaxData);
                     }
                 }
 
                 // Store PHVs
+                $newFuturePhvAdded = false;
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
+                        if (! $this->historyRowHasValues($phvData, ['counsel_id', 'amount', 'start_date', 'expiry_date', 'notify_before_expiry'])) {
+                            continue;
+                        }
+
                         if ($request->hasFile("phvs.{$index}.document")) {
                             $phvData['document'] = $this->uploadFile(
                                 $request->file("phvs.{$index}.document"),
@@ -201,9 +216,11 @@ class CarController extends Controller
                         }
                         $phvData = $this->mergePhvAppliedData($phvData, null);
                         $car->phvs()->create($phvData);
+                        $newFuturePhvAdded = $newFuturePhvAdded || $this->hasFuturePhvExpiry($phvData);
                     }
                 }
 
+                $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
                 $this->storeServiceIfPresent($request, $car, $tenant);
                 $this->syncReservation($request, $car, $tenant);
 
@@ -310,6 +327,8 @@ class CarController extends Controller
             'seller_name' => 'nullable|string|max:255',
             'seller_notes' => 'nullable|string',
             'damaged_notes' => 'nullable|string',
+            'phv_status' => 'nullable|in:need_to_apply,applied,phv_active',
+            'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -328,21 +347,21 @@ class CarController extends Controller
             'reservation_terms_conditions' => 'nullable|string',
 
             'mots.*.id' => 'nullable|exists:car_mots,id',
-            'mots.*.expiry_date' => 'required|date',
-            'mots.*.amount' => 'required|numeric|min:0',
-            'mots.*.term' => 'required|string',
+            'mots.*.expiry_date' => 'nullable|date',
+            'mots.*.amount' => 'nullable|numeric|min:0',
+            'mots.*.term' => 'nullable|string',
             'mots.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
 
-            'road_taxes.*.start_date' => 'required|date',
-            'road_taxes.*.term' => 'required|string',
-            'road_taxes.*.amount' => 'required|numeric|min:0',
+            'road_taxes.*.start_date' => 'nullable|date',
+            'road_taxes.*.term' => 'nullable|string',
+            'road_taxes.*.amount' => 'nullable|numeric|min:0',
 
             'phvs.*.id' => 'nullable|exists:car_phvs,id',
-            'phvs.*.counsel_id' => 'required|exists:counsels,id',
-            'phvs.*.amount' => 'required|numeric|min:0',
-            'phvs.*.start_date' => 'required|date',
-            'phvs.*.expiry_date' => 'required|date',
-            'phvs.*.notify_before_expiry' => 'required|integer|min:1',
+            'phvs.*.counsel_id' => 'nullable|exists:counsels,id',
+            'phvs.*.amount' => 'nullable|numeric|min:0',
+            'phvs.*.start_date' => 'nullable|date',
+            'phvs.*.expiry_date' => 'nullable|date',
+            'phvs.*.notify_before_expiry' => 'nullable|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'phvs.*.phv_applied' => 'nullable|boolean',
             'phvs.*.phv_applied_date' => 'nullable|date',
@@ -393,6 +412,10 @@ class CarController extends Controller
                         $motId = $motData['id'] ?? null;
                         $existingMot = $motId ? $existingMots->get($motId) : null;
 
+                        if (! $existingMot && ! $this->historyRowHasValues($motData, ['expiry_date', 'amount', 'term'])) {
+                            continue;
+                        }
+
                         if ($request->hasFile("mots.{$index}.document")) {
                             $motData['document'] = $this->uploadFile(
                                 $request->file("mots.{$index}.document"),
@@ -431,6 +454,10 @@ class CarController extends Controller
                 $car->roadTaxes()->delete();
                 if ($request->has('road_taxes')) {
                     foreach ($request->input('road_taxes') as $roadTaxData) {
+                        if (! $this->historyRowHasValues($roadTaxData, ['start_date', 'term', 'amount'])) {
+                            continue;
+                        }
+
                         $car->roadTaxes()->create($roadTaxData);
                     }
                 }
@@ -438,11 +465,16 @@ class CarController extends Controller
                 // ==================== Update PHVs ====================
                 $existingPhvs = $car->phvs->keyBy('id');
                 $processedPhvIds = [];
+                $newFuturePhvAdded = false;
 
                 if ($request->has('phvs')) {
                     foreach ($request->input('phvs') as $index => $phvData) {
                         $phvId = $phvData['id'] ?? null;
                         $existingPhv = $phvId ? $existingPhvs->get($phvId) : null;
+
+                        if (! $existingPhv && ! $this->historyRowHasValues($phvData, ['counsel_id', 'amount', 'start_date', 'expiry_date', 'notify_before_expiry'])) {
+                            continue;
+                        }
 
                         if ($request->hasFile("phvs.{$index}.document")) {
                             $phvData['document'] = $this->uploadFile(
@@ -466,6 +498,7 @@ class CarController extends Controller
                         } else {
                             $newPhv = $car->phvs()->create($phvData);
                             $processedPhvIds[] = $newPhv->id;
+                            $newFuturePhvAdded = $newFuturePhvAdded || $this->hasFuturePhvExpiry($phvData);
                         }
                     }
                 }
@@ -479,6 +512,7 @@ class CarController extends Controller
                     $phvToDelete->delete();
                 }
 
+                $this->syncCarPhvStatus($request, $car, $newFuturePhvAdded);
                 $this->storeServiceIfPresent($request, $car, $tenant);
                 $this->syncReservation($request, $car, $tenant);
 
@@ -756,7 +790,8 @@ class CarController extends Controller
         $keys = [
             'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
-            'purchase_type', 'seller_name', 'seller_notes', 'damaged_notes', 'fleet_status', 'available_from_date',
+            'purchase_type', 'seller_name', 'seller_notes', 'damaged_notes',
+            'phv_status', 'phv_applied_date', 'fleet_status', 'available_from_date',
         ];
 
         $data = array_intersect_key($validated, array_flip($keys));
@@ -783,6 +818,14 @@ class CarController extends Controller
 
     private function mergePhvAppliedData(array $phvData, ?CarPhv $existing): array
     {
+        if ($existing && ! array_key_exists('phv_applied', $phvData) && ! array_key_exists('phv_applied_date', $phvData)) {
+            $phvData['phv_applied'] = $existing->phv_applied;
+            $phvData['phv_applied_date'] = $existing->phv_applied_date?->format('Y-m-d');
+            $phvData['phv_applied_by'] = $existing->phv_applied_by;
+
+            return $phvData;
+        }
+
         $isApplied = (bool) ($phvData['phv_applied'] ?? false);
         $phvData['phv_applied'] = $isApplied;
         $phvData['phv_applied_date'] = $isApplied ? ($phvData['phv_applied_date'] ?? null) : null;
@@ -796,6 +839,50 @@ class CarController extends Controller
         }
 
         return $phvData;
+    }
+
+    private function historyRowHasValues(array $row, array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasFuturePhvExpiry(array $phvData): bool
+    {
+        if (empty($phvData['expiry_date'])) {
+            return false;
+        }
+
+        return Carbon::parse($phvData['expiry_date'])->startOfDay()->gte(now()->startOfDay());
+    }
+
+    private function syncCarPhvStatus(Request $request, Car $car, bool $newFuturePhvAdded): void
+    {
+        if ($newFuturePhvAdded) {
+            $car->update([
+                'phv_status' => 'phv_active',
+                'phv_applied_date' => null,
+                'phv_applied_by' => null,
+            ]);
+
+            return;
+        }
+
+        $status = $request->input('phv_status', $car->phv_status ?: 'need_to_apply');
+        $appliedDate = $status === 'applied' ? ($request->input('phv_applied_date') ?: null) : null;
+
+        $car->update([
+            'phv_status' => $status,
+            'phv_applied_date' => $appliedDate,
+            'phv_applied_by' => $status === 'applied'
+                ? ($car->phv_status === 'applied' && $car->phv_applied_by ? $car->phv_applied_by : Auth::id())
+                : null,
+        ]);
     }
 
     private function storeServiceIfPresent(Request $request, Car $car, $tenant): void

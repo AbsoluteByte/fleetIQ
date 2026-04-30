@@ -13,7 +13,8 @@ class Car extends Model
         'tenant_id','company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
-        'seller_notes', 'damaged_notes', 'log_book_applied', 'log_book_applied_date', 'old_log_book',
+        'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
+        'log_book_applied', 'log_book_applied_date', 'old_log_book',
         'log_book_applied_by',
         'sorn_applied', 'sorn_applied_at', 'sorn_applied_by',
         'fleet_status', 'available_from_date',
@@ -28,6 +29,7 @@ class Car extends Model
         'sorn_applied' => 'boolean',
         'sorn_applied_at' => 'datetime',
         'available_from_date' => 'date',
+        'phv_applied_date' => 'date',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -55,6 +57,11 @@ class Car extends Model
     public function sornAppliedBy()
     {
         return $this->belongsTo(User::class, 'sorn_applied_by');
+    }
+
+    public function phvAppliedBy()
+    {
+        return $this->belongsTo(User::class, 'phv_applied_by');
     }
 
     public function agreements()
