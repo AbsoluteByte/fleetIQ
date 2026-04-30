@@ -16,7 +16,7 @@
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/bootstrap.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/bootstrap-extended.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/colors.css') }}">
-<link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/components.css') }}?v=20260430">
+<link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/components.css') }}?v=20260430-1">
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/themes/dark-layout.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ asset('app-assets/css/themes/semi-dark-layout.css') }}">
 
