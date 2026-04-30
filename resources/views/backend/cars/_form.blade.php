@@ -239,6 +239,17 @@
         </div>
     </div>
 
+    <div class="col-12" id="damaged-notes-wrapper" style="display: {{ $fleetStatus === 'damaged' ? 'block' : 'none' }};">
+        <div class="form-group">
+            <label for="damaged_notes">Damaged Notes</label>
+            <textarea name="damaged_notes" id="damaged_notes" rows="3" placeholder="Enter damage details"
+                class="form-control @error('damaged_notes') is-invalid @enderror">{{ old('damaged_notes', isset($model) && $model->id ? ($model->damaged_notes ?? '') : '') }}</textarea>
+            @error('damaged_notes')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
     <div class="col-12">
         <div class="form-group mb-2">
             <div class="form-check">
@@ -1265,7 +1276,7 @@
 </div>
 
 {{-- Reservation Information --}}
-<div class="row mt-1">
+<div class="row mt-1" id="reservation-card-wrapper">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
@@ -1489,10 +1500,36 @@
             const section = document.getElementById('reservation-section');
             const reservationDate = document.getElementById('reservation_date');
             if (!cb || !section) return;
+            if (document.getElementById('fleet_status')?.value === 'damaged') {
+                cb.checked = false;
+                section.style.display = 'none';
+                return;
+            }
             section.style.display = cb.checked ? 'block' : 'none';
             if (cb.checked && reservationDate && !reservationDate.value) {
                 reservationDate.value = todayYmd;
             }
+        }
+
+        function toggleDamagedStatusSections() {
+            const isDamaged = document.getElementById('fleet_status')?.value === 'damaged';
+            const damagedNotes = document.getElementById('damaged-notes-wrapper');
+            const reservationCard = document.getElementById('reservation-card-wrapper');
+            const reserveCheckbox = document.getElementById('reserve_car');
+
+            if (damagedNotes) {
+                damagedNotes.style.display = isDamaged ? 'block' : 'none';
+            }
+
+            if (reservationCard) {
+                reservationCard.style.display = isDamaged ? 'none' : 'flex';
+            }
+
+            if (isDamaged && reserveCheckbox) {
+                reserveCheckbox.checked = false;
+            }
+
+            toggleReservationSection();
         }
 
         function bindPhvAppliedDefaults(scope) {
@@ -1505,6 +1542,26 @@
                     }
                 });
                 checkbox.dispatchEvent(new Event('change'));
+            });
+        }
+
+        function preventEnterFormSubmit() {
+            const submitButton = document.querySelector('button[type="submit"]');
+            const form = submitButton ? submitButton.closest('form') : null;
+            if (!form) return;
+
+            form.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter') return;
+
+                const target = event.target;
+                const tagName = target.tagName ? target.tagName.toLowerCase() : '';
+                const inputType = (target.getAttribute('type') || '').toLowerCase();
+                const isTextArea = tagName === 'textarea';
+                const isButton = tagName === 'button' || inputType === 'button' || inputType === 'submit';
+
+                if (!isTextArea && !isButton) {
+                    event.preventDefault();
+                }
             });
         }
 
@@ -1567,8 +1624,10 @@
             filterInsuranceProviders();
             toggleInsuranceSection();
             toggleLogBookSection();
+            toggleDamagedStatusSections();
             toggleReservationSection();
             bindPhvAppliedDefaults(document);
+            preventEnterFormSubmit();
             (function defaultEmptyAppliedDate() {
                 const dateInput = document.getElementById('log_book_applied_date');
                 const cb = document.getElementById('log_book_applied');
@@ -1581,6 +1640,7 @@
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
             document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
             document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
+            document.getElementById('fleet_status').addEventListener('change', toggleDamagedStatusSections);
         });
 
         function addMOT() {

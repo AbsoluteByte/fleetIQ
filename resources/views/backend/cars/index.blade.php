@@ -9,11 +9,11 @@
                         <div class="float-right">
                             <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.available-by-phv') }}">Available by PHV</a>
                             <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.awaiting-phv') }}">Awaiting PHV</a>
-                            <a class="btn btn-outline-secondary btn-sm" href="{{ route('cars.reports.status', 'damaged') }}">Damaged</a>
-                            <a class="btn btn-outline-secondary btn-sm" href="{{ route('cars.reports.status', 'written_off') }}">Written off</a>
-                            <a class="btn btn-outline-secondary btn-sm" href="{{ route('cars.reports.status', 'stolen') }}">Stolen</a>
-                            <a class="btn btn-outline-secondary btn-sm" href="{{ route('cars.reports.status', 'for_sale') }}">For sale</a>
-                            <a class="btn btn-outline-secondary btn-sm" href="{{ route('cars.reports.status', 'sold') }}">Sold</a>
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'damaged') }}">Damaged</a>
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'written_off') }}">Written off</a>
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'stolen') }}">Stolen</a>
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'for_sale') }}">For sale</a>
+                            <a class="btn btn-outline-primary btn-sm" href="{{ route('cars.reports.status', 'sold') }}">Sold</a>
                             <a class="btn btn-primary btn-sm" href="{{ route($url . 'create') }}"><i class="fa fa-plus"></i> Add {{ $singular }}</a>
                         </div>
                     </div>

@@ -108,6 +108,7 @@ class CarController extends Controller
             'purchase_type' => 'required|in:imported,uk',
             'seller_name' => 'nullable|string|max:255',
             'seller_notes' => 'nullable|string',
+            'damaged_notes' => 'nullable|string',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -308,6 +309,7 @@ class CarController extends Controller
             'purchase_type' => 'required|in:imported,uk',
             'seller_name' => 'nullable|string|max:255',
             'seller_notes' => 'nullable|string',
+            'damaged_notes' => 'nullable|string',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -754,7 +756,7 @@ class CarController extends Controller
         $keys = [
             'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
-            'purchase_type', 'seller_name', 'seller_notes', 'fleet_status', 'available_from_date',
+            'purchase_type', 'seller_name', 'seller_notes', 'damaged_notes', 'fleet_status', 'available_from_date',
         ];
 
         $data = array_intersect_key($validated, array_flip($keys));
@@ -765,6 +767,10 @@ class CarController extends Controller
 
         if (! array_key_exists('seller_notes', $data) && $request->has('seller_notes')) {
             $data['seller_notes'] = $request->string('seller_notes')->value();
+        }
+
+        if (! array_key_exists('damaged_notes', $data) && $request->has('damaged_notes')) {
+            $data['damaged_notes'] = $request->string('damaged_notes')->value();
         }
 
         $data['fleet_status'] = $data['fleet_status'] ?? 'available_for_rent';
@@ -822,6 +828,13 @@ class CarController extends Controller
     private function syncReservation(Request $request, Car $car, $tenant): void
     {
         $activeReservation = $car->reservations()->where('status', 'active')->latest()->first();
+
+        if ($car->fleet_status === 'damaged') {
+            if ($activeReservation) {
+                $activeReservation->update(['status' => 'cancelled']);
+            }
+            return;
+        }
 
         if (! $request->boolean('reserve_car')) {
             if ($activeReservation) {
