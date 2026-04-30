@@ -8,6 +8,7 @@ use App\Models\CarInsurance;
 use App\Models\CarMot;
 use App\Models\CarPhv;
 use App\Models\CarRoadTax;
+use App\Models\CarService;
 use App\Models\Driver;
 use App\Models\Agreement;
 use App\Models\AgreementCollection;
@@ -170,6 +171,8 @@ class DashboardController extends Controller
     public function getUnifiedNotifications()
     {
         $tenant = Auth::user()->currentTenant();
+        $fleetNotificationExcludedStatuses = ['written_off', 'stolen', 'sold'];
+        $nonRoadTaxNotificationExcludedStatuses = array_merge($fleetNotificationExcludedStatuses, ['for_sale']);
 
         if (!$tenant) {
             return [
@@ -292,8 +295,9 @@ class DashboardController extends Controller
 
         // ==================== 4. INSURANCE POLICIES (latest policy per car only) ====================
         $insuranceRows = CarInsurance::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
+            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+                $query->where('tenant_id', $tenant->id)
+                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
             })
             ->get();
         $expiringInsurance = $this->latestInsurancePerCar($insuranceRows)
@@ -342,8 +346,9 @@ class DashboardController extends Controller
 
         // ==================== 5. PHV LICENSES (latest PHV per car only) ====================
         $phvRows = CarPhv::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
+            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+                $query->where('tenant_id', $tenant->id)
+                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
             })
             ->get();
         $expiringPhvs = $this->latestPhvPerCar($phvRows)
@@ -392,8 +397,9 @@ class DashboardController extends Controller
 
         // ==================== 6. MOT CERTIFICATES (latest MOT per car only) ====================
         $motRows = CarMot::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant) {
-                $query->where('tenant_id', $tenant->id);
+            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+                $query->where('tenant_id', $tenant->id)
+                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
             })
             ->get();
         $expiringMots = $this->latestMotPerCar($motRows)
@@ -441,9 +447,10 @@ class DashboardController extends Controller
 
         // ==================== 7. ROAD TAX — latest period per car (exclude SORN: vehicle off the road) ====================
         $allRoadTaxes = CarRoadTax::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant) {
+            ->whereHas('car', function ($query) use ($tenant, $fleetNotificationExcludedStatuses) {
                 $query->where('tenant_id', $tenant->id)
-                    ->where('sorn_applied', false);
+                    ->where('sorn_applied', false)
+                    ->whereNotIn('fleet_status', $fleetNotificationExcludedStatuses);
             })
             ->get();
 
@@ -491,7 +498,101 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 8. DRIVER LICENSES ====================
+        // ==================== 8. CAR SERVICES (latest service per car, every 3 months) ====================
+        $serviceRows = CarService::with(['car'])
+            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
+                $query->where('tenant_id', $tenant->id)
+                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
+            })
+            ->get();
+        $serviceNotifications = $this->latestServicePerCar($serviceRows)
+            ->map(function ($service) {
+                $service->due_date = $service->service_date->copy()->addMonths(3);
+                return $service;
+            })
+            ->filter(function ($service) {
+                return $service->due_date <= now()->addDays(30);
+            })
+            ->sortBy('due_date')
+            ->values();
+
+        foreach ($serviceNotifications as $service) {
+            $daysDiff = (int) now()->diffInDays($service->due_date, false);
+
+            if ($daysDiff > 0) {
+                $msg = 'Service due in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $color = 'info';
+                $priority = 7;
+            } elseif ($daysDiff == 0) {
+                $msg = 'Service due today';
+                $color = 'warning';
+                $priority = 2;
+            } else {
+                $msg = 'Service overdue by ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '');
+                $color = 'danger';
+                $priority = 1;
+            }
+
+            $notifications->push([
+                'id' => 'car_service_' . $service->id,
+                'type' => 'car_service_due',
+                'priority' => $priority,
+                'title' => $daysDiff >= 0 ? 'Car Service Due' : 'Car Service Overdue',
+                'message' => $service->car->registration . ' - ' . $msg,
+                'simple_message' => $service->car->registration . ' - ' . $msg,
+                'vehicle' => $service->car->registration,
+                'time_ago' => $service->due_date->diffForHumans(),
+                'action_url' => route('cars.edit', $service->car_id),
+                'icon' => 'icon-settings',
+                'color' => $color,
+                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                'border_color' => $color == 'danger' ? '#ef4444' : '#3b82f6',
+                'created_at' => $service->due_date,
+                'sort_key' => $service->due_date->timestamp,
+            ]);
+        }
+
+        // ==================== 9. AGREEMENT TERMINATION NOTICES ====================
+        $terminationNotices = Agreement::with(['driver', 'car'])
+            ->where('tenant_id', $tenant->id)
+            ->whereHas('car', function ($query) use ($nonRoadTaxNotificationExcludedStatuses) {
+                $query->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
+            })
+            ->whereNotNull('termination_notice_date')
+            ->where(function ($query) {
+                $query->whereNull('termination_available_from_date')
+                    ->orWhere('termination_available_from_date', '<=', now()->addDays(30));
+            })
+            ->orderBy('termination_available_from_date')
+            ->get();
+
+        foreach ($terminationNotices as $agreement) {
+            $availableDate = $agreement->termination_available_from_date ?: $agreement->termination_notice_date;
+            $daysDiff = (int) now()->diffInDays($availableDate, false);
+            $msg = $daysDiff >= 0
+                ? 'Available in ' . $daysDiff . ' day' . ($daysDiff === 1 ? '' : 's')
+                : 'Available since ' . abs($daysDiff) . ' day' . (abs($daysDiff) === 1 ? '' : 's') . ' ago';
+
+            $notifications->push([
+                'id' => 'agreement_termination_' . $agreement->id,
+                'type' => 'agreement_termination',
+                'priority' => $daysDiff < 0 ? 1 : 6,
+                'title' => 'Rent Agreement Termination',
+                'message' => ($agreement->car->registration ?? 'Vehicle') . ' - ' . $msg,
+                'simple_message' => ($agreement->car->registration ?? 'Vehicle') . ' - ' . $msg,
+                'vehicle' => $agreement->car->registration ?? 'N/A',
+                'time_ago' => $availableDate->diffForHumans(),
+                'action_url' => route('agreements.show', $agreement),
+                'icon' => 'icon-file-text',
+                'color' => $daysDiff < 0 ? 'danger' : 'info',
+                'bg_color' => $daysDiff < 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                'border_color' => $daysDiff < 0 ? '#ef4444' : '#3b82f6',
+                'created_at' => $availableDate,
+                'sort_key' => $availableDate->timestamp,
+            ]);
+        }
+
+        // ==================== 10. DRIVER LICENSES ====================
         $expiringDriverLicenses = Driver::where('tenant_id', $tenant->id)
             ->where('driver_license_expiry_date', '<=', now()->addDays(30))
             ->orderBy('driver_license_expiry_date')
@@ -533,7 +634,7 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 9. PHD LICENSES ====================
+        // ==================== 11. PHD LICENSES ====================
         $expiringPhdLicenses = Driver::where('tenant_id', $tenant->id)
             ->whereNotNull('phd_license_expiry_date')
             ->where('phd_license_expiry_date', '<=', now()->addDays(30))
@@ -591,6 +692,8 @@ class DashboardController extends Controller
             'expiring_phv' => $expiringPhvs->count(),
             'expiring_mot' => $expiringMots->count(),
             'expiring_road_tax' => $expiringRoadTaxes->count(),
+            'car_service_due' => $serviceNotifications->count(),
+            'agreement_terminations' => $terminationNotices->count(),
             'expiring_driver_licenses' => $expiringDriverLicenses->count(),
             'expiring_phd_licenses' => $expiringPhdLicenses->count(),
             'total_count' => $sortedNotifications->count()
@@ -730,6 +833,15 @@ class DashboardController extends Controller
         return $policies->groupBy('car_id')->map(function ($group) {
             return $group->sortByDesc(function ($p) {
                 return [optional($p->expiry_date)->timestamp ?? 0, $p->id];
+            })->first();
+        })->values();
+    }
+
+    private function latestServicePerCar(Collection $services): Collection
+    {
+        return $services->groupBy('car_id')->map(function ($group) {
+            return $group->sortByDesc(function ($service) {
+                return [optional($service->service_date)->timestamp ?? 0, $service->id];
             })->first();
         })->values();
     }

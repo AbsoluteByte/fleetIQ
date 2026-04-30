@@ -54,6 +54,16 @@
                                     <td><strong>End Date:</strong></td>
                                     <td>{{ $agreement->end_date->format('M d, Y') }}</td>
                                 </tr>
+                                @if($agreement->termination_notice_date)
+                                    <tr>
+                                        <td><strong>Termination Notice:</strong></td>
+                                        <td>{{ $agreement->termination_notice_date->format('M d, Y') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Car Available From:</strong></td>
+                                        <td>{{ $agreement->termination_available_from_date ? $agreement->termination_available_from_date->format('M d, Y') : '—' }}</td>
+                                    </tr>
+                                @endif
                             </table>
                         </div>
                         <div class="col-md-6">
@@ -105,6 +115,13 @@
                                     </div>
                                 @endif
                             </div>
+                        </div>
+                    @endif
+
+                    @if($agreement->termination_notice_date && $agreement->termination_notes)
+                        <div class="mt-3 pt-3 border-top">
+                            <h6>Termination Notes</h6>
+                            <p class="mb-0" style="white-space: pre-wrap;">{{ $agreement->termination_notes }}</p>
                         </div>
                     @endif
                 </div>

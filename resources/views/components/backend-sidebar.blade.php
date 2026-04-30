@@ -132,6 +132,12 @@
                         <span class="menu-title">Fleet</span>
                     </a>
                 </li>
+                <li class="nav-item {{ Request::is('admin/cars/reports/available-by-phv') ? 'active' : '' }}">
+                    <a href="{{ route('cars.reports.available-by-phv') }}">
+                        <i class="fa fa-taxi"></i>
+                        <span class="menu-title">Available by PHV</span>
+                    </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin/drivers/*') ? 'active' : '' }} {{ Request::is('admin/drivers') ? 'active' : '' }}">
                     <a href="{{ route('drivers.index') }}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="1.3rem" height="1.3rem" viewBox="0 0 24 24"

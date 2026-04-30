@@ -6,7 +6,9 @@ use App\Models\Car;
 use App\Models\CarModel;
 use App\Models\CarMot;
 use App\Models\CarPhv;
+use App\Models\CarReservation;
 use App\Models\CarRoadTax;
+use App\Models\CarService;
 use App\Models\Company;
 use App\Models\Counsel;
 use App\Models\InsuranceProvider;
@@ -49,6 +51,9 @@ class CarController extends Controller
                 'carModel',
                 'phvs.counsel',
                 'insurances.status',
+                'services',
+                'reservations',
+                'agreements',
             ])
             ->latest()
             ->get();
@@ -106,6 +111,19 @@ class CarController extends Controller
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
+            'available_from_date' => 'nullable|date',
+            'service_date' => 'nullable|date',
+            'service_mileage' => 'nullable|integer|min:0',
+            'service_notes' => 'nullable|string',
+            'service_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'reserve_car' => 'nullable|boolean',
+            'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
+            'reservation_customer_phone' => 'nullable|string|max:50',
+            'reservation_customer_email' => 'nullable|email|max:255',
+            'reservation_date' => 'nullable|date',
+            'reservation_available_from_date' => 'nullable|date',
+            'reservation_terms_conditions' => 'nullable|string',
 
             'mots.*.expiry_date' => 'required|date',
             'mots.*.amount' => 'required|numeric|min:0',
@@ -122,6 +140,8 @@ class CarController extends Controller
             'phvs.*.expiry_date' => 'required|date',
             'phvs.*.notify_before_expiry' => 'required|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'phvs.*.phv_applied' => 'nullable|boolean',
+            'phvs.*.phv_applied_date' => 'nullable|date',
         ];
 
         if ($request->has('has_insurance')) {
@@ -178,9 +198,13 @@ class CarController extends Controller
                                 'uploads/cars/phv_documents'
                             );
                         }
+                        $phvData = $this->mergePhvAppliedData($phvData, null);
                         $car->phvs()->create($phvData);
                     }
                 }
+
+                $this->storeServiceIfPresent($request, $car, $tenant);
+                $this->syncReservation($request, $car, $tenant);
 
                 // Store Insurance
                 if ($request->has('has_insurance')) {
@@ -226,7 +250,7 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
 
-        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy']);
+        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy', 'services.createdBy', 'reservations.createdBy', 'agreements']);
         $this->sortCarHistoryRelations($car);
         return view($this->dir . 'show', compact('car'));
     }
@@ -242,7 +266,7 @@ class CarController extends Controller
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy', 'services', 'reservations'])
             ->findOrFail($id);
         $this->sortCarHistoryRelations($model);
 
@@ -287,6 +311,19 @@ class CarController extends Controller
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
             'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
+            'available_from_date' => 'nullable|date',
+            'service_date' => 'nullable|date',
+            'service_mileage' => 'nullable|integer|min:0',
+            'service_notes' => 'nullable|string',
+            'service_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'reserve_car' => 'nullable|boolean',
+            'reservation_customer_name' => 'required_if:reserve_car,1|nullable|string|max:255',
+            'reservation_customer_phone' => 'nullable|string|max:50',
+            'reservation_customer_email' => 'nullable|email|max:255',
+            'reservation_date' => 'nullable|date',
+            'reservation_available_from_date' => 'nullable|date',
+            'reservation_terms_conditions' => 'nullable|string',
 
             'mots.*.id' => 'nullable|exists:car_mots,id',
             'mots.*.expiry_date' => 'required|date',
@@ -305,6 +342,8 @@ class CarController extends Controller
             'phvs.*.expiry_date' => 'required|date',
             'phvs.*.notify_before_expiry' => 'required|integer|min:1',
             'phvs.*.document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'phvs.*.phv_applied' => 'nullable|boolean',
+            'phvs.*.phv_applied_date' => 'nullable|date',
         ];
 
         if ($request->has('has_insurance')) {
@@ -416,6 +455,7 @@ class CarController extends Controller
                             $phvData['document'] = $existingPhv->document;
                         }
 
+                        $phvData = $this->mergePhvAppliedData($phvData, $existingPhv);
                         unset($phvData['id']);
 
                         if ($existingPhv) {
@@ -436,6 +476,9 @@ class CarController extends Controller
                     }
                     $phvToDelete->delete();
                 }
+
+                $this->storeServiceIfPresent($request, $car, $tenant);
+                $this->syncReservation($request, $car, $tenant);
 
                 // ==================== Update Insurance ====================
                 $latestInsurance = $car->insurances->first();
@@ -510,14 +553,16 @@ class CarController extends Controller
 
         try {
             DB::transaction(function () use ($car) {
+                $car->load(['mots', 'phvs', 'insurances', 'services']);
+                $this->deleteCarFiles($car);
                 $car->mots()->delete();
                 $car->roadTaxes()->delete();
                 $car->phvs()->delete();
                 $car->insurances()->delete();
+                $car->services()->delete();
+                $car->reservations()->delete();
                 $car->delete();
             });
-
-            $this->deleteCarFiles($car);
 
             return redirect()->route($this->url . 'index')
                 ->with('success', 'Car deleted successfully.');
@@ -630,6 +675,77 @@ class CarController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function statusReport(string $status)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $statuses = $this->fleetStatuses();
+
+        abort_unless($tenant && array_key_exists($status, $statuses), 404);
+
+        $cars = Car::where('tenant_id', $tenant->id)
+            ->where('fleet_status', $status)
+            ->with(['company', 'carModel', 'phvs.counsel', 'reservations'])
+            ->latest()
+            ->get();
+
+        return view($this->dir . 'status-report', [
+            'cars' => $cars,
+            'status' => $status,
+            'statusLabel' => $statuses[$status],
+        ]);
+    }
+
+    public function availableByPhv()
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant, 403);
+
+        $cars = Car::where('tenant_id', $tenant->id)
+            ->with(['company', 'carModel', 'phvs.counsel', 'insurances.status', 'services', 'reservations', 'agreements'])
+            ->get()
+            ->filter(fn (Car $car) => $car->isAvailableForRent())
+            ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Counsel');
+
+        return view($this->dir . 'available-by-phv', compact('cars'));
+    }
+
+    public function awaitingPhv()
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant, 403);
+
+        $cars = Car::where('tenant_id', $tenant->id)
+            ->doesntHave('phvs')
+            ->with(['company', 'carModel', 'reservations'])
+            ->latest()
+            ->get();
+
+        return view($this->dir . 'status-report', [
+            'cars' => $cars,
+            'status' => 'awaiting_phv',
+            'statusLabel' => 'Awaiting PHV',
+        ]);
+    }
+
+    public function downloadV5(Car $car)
+    {
+        return $this->downloadCarFile($car, 'uploads/cars', $car->v5_document, 'v5');
+    }
+
+    public function downloadMot(Car $car, int $car_mot)
+    {
+        $record = CarMot::where('car_id', $car->id)->where('id', $car_mot)->firstOrFail();
+
+        return $this->downloadCarFile($car, 'uploads/cars/mot_documents', $record->document, 'mot');
+    }
+
+    public function downloadPhv(Car $car, int $car_phv)
+    {
+        $record = CarPhv::where('car_id', $car->id)->where('id', $car_phv)->firstOrFail();
+
+        return $this->downloadCarFile($car, 'uploads/cars/phv_documents', $record->document, 'phv');
+    }
+
     /**
      * Only pass real car columns to create/update (not nested mots/phvs/insurance keys from validate()).
      */
@@ -638,7 +754,7 @@ class CarController extends Controller
         $keys = [
             'company_id', 'car_model_id', 'registration', 'color', 'vin', 'v5_document',
             'manufacture_year', 'registration_year', 'purchase_date', 'purchase_price',
-            'purchase_type', 'seller_name', 'seller_notes',
+            'purchase_type', 'seller_name', 'seller_notes', 'fleet_status', 'available_from_date',
         ];
 
         $data = array_intersect_key($validated, array_flip($keys));
@@ -651,7 +767,94 @@ class CarController extends Controller
             $data['seller_notes'] = $request->string('seller_notes')->value();
         }
 
+        $data['fleet_status'] = $data['fleet_status'] ?? 'available_for_rent';
+        if (($data['available_from_date'] ?? '') === '') {
+            $data['available_from_date'] = null;
+        }
+
         return $data;
+    }
+
+    private function mergePhvAppliedData(array $phvData, ?CarPhv $existing): array
+    {
+        $isApplied = (bool) ($phvData['phv_applied'] ?? false);
+        $phvData['phv_applied'] = $isApplied;
+        $phvData['phv_applied_date'] = $isApplied ? ($phvData['phv_applied_date'] ?? null) : null;
+
+        if ($isApplied) {
+            $phvData['phv_applied_by'] = $existing && $existing->phv_applied
+                ? $existing->phv_applied_by
+                : Auth::id();
+        } else {
+            $phvData['phv_applied_by'] = null;
+        }
+
+        return $phvData;
+    }
+
+    private function storeServiceIfPresent(Request $request, Car $car, $tenant): void
+    {
+        if (! $request->filled('service_date')) {
+            return;
+        }
+
+        $serviceData = [
+            'tenant_id' => $tenant->id,
+            'service_date' => $request->input('service_date'),
+            'mileage' => $request->input('service_mileage'),
+            'notes' => $request->input('service_notes'),
+            'created_by' => Auth::id(),
+        ];
+
+        if ($request->hasFile('service_document')) {
+            $serviceData['document'] = $this->uploadFile($request->file('service_document'), 'uploads/cars/service_documents');
+        }
+
+        $alreadyExists = $car->services()
+            ->whereDate('service_date', $serviceData['service_date'])
+            ->exists();
+
+        if (! $alreadyExists) {
+            $car->services()->create($serviceData);
+        }
+    }
+
+    private function syncReservation(Request $request, Car $car, $tenant): void
+    {
+        $activeReservation = $car->reservations()->where('status', 'active')->latest()->first();
+
+        if (! $request->boolean('reserve_car')) {
+            if ($activeReservation) {
+                $activeReservation->update(['status' => 'cancelled']);
+            }
+            if ($car->fleet_status === 'reserved') {
+                $car->update(['fleet_status' => 'available_for_rent']);
+            }
+            return;
+        }
+
+        $reservationData = [
+            'tenant_id' => $tenant->id,
+            'customer_name' => $request->input('reservation_customer_name'),
+            'customer_phone' => $request->input('reservation_customer_phone'),
+            'customer_email' => $request->input('reservation_customer_email'),
+            'reservation_date' => $request->input('reservation_date') ?: now()->toDateString(),
+            'available_from_date' => $request->input('reservation_available_from_date'),
+            'terms_conditions' => $request->input('reservation_terms_conditions'),
+            'status' => 'active',
+            'created_by' => Auth::id(),
+        ];
+
+        if ($activeReservation) {
+            $activeReservation->update($reservationData);
+        } else {
+            $car->reservations()->create($reservationData);
+        }
+
+        $car->update([
+            'fleet_status' => 'reserved',
+            'available_from_date' => $reservationData['available_from_date'],
+        ]);
     }
 
     /**
@@ -736,6 +939,34 @@ class CarController extends Controller
         }
     }
 
+    private function fleetStatuses(): array
+    {
+        return [
+            'available_for_rent' => 'Available for rent',
+            'damaged' => 'Damaged',
+            'written_off' => 'Written off',
+            'stolen' => 'Stolen',
+            'for_sale' => 'For sale',
+            'sold' => 'Sold',
+            'reserved' => 'Reserved',
+        ];
+    }
+
+    private function downloadCarFile(Car $car, string $directory, ?string $filename, string $type)
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant && $car->tenant_id === $tenant->id, 403);
+        abort_unless($filename, 404);
+
+        $path = public_path($directory . '/' . $filename);
+        abort_unless(File::exists($path), 404);
+
+        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $registration = preg_replace('/[^A-Za-z0-9]/', '', $car->registration);
+
+        return response()->download($path, $registration . '-' . $type . '.' . $extension);
+    }
+
     private function deleteCarFiles($car)
     {
         $filesToDelete = [
@@ -758,6 +989,12 @@ class CarController extends Controller
         foreach ($car->insurances as $insurance) {
             if ($insurance->insurance_document) {
                 $filesToDelete[] = public_path('uploads/cars/insurance_documents/' . $insurance->insurance_document);
+            }
+        }
+
+        foreach ($car->services as $service) {
+            if ($service->document) {
+                $filesToDelete[] = public_path('uploads/cars/service_documents/' . $service->document);
             }
         }
 

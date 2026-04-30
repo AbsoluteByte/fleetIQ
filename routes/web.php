@@ -74,6 +74,12 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     // Main Features
     Route::resource('companies', App\Http\Controllers\Backend\CompanyController::class);
+    Route::get('cars/reports/status/{status}', [App\Http\Controllers\Backend\CarController::class, 'statusReport'])->name('cars.reports.status');
+    Route::get('cars/reports/available-by-phv', [App\Http\Controllers\Backend\CarController::class, 'availableByPhv'])->name('cars.reports.available-by-phv');
+    Route::get('cars/reports/awaiting-phv', [App\Http\Controllers\Backend\CarController::class, 'awaitingPhv'])->name('cars.reports.awaiting-phv');
+    Route::get('cars/{car}/download/v5', [App\Http\Controllers\Backend\CarController::class, 'downloadV5'])->name('cars.download.v5');
+    Route::get('cars/{car}/mots/{car_mot}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadMot'])->name('cars.mots.download');
+    Route::get('cars/{car}/phvs/{car_phv}/download', [App\Http\Controllers\Backend\CarController::class, 'downloadPhv'])->name('cars.phvs.download');
     Route::post('cars/{car}/apply-sorn', [App\Http\Controllers\Backend\CarController::class, 'applySorn'])->name('cars.apply-sorn');
     Route::delete('cars/{car}/mots/{car_mot}', [App\Http\Controllers\Backend\CarController::class, 'destroyMot'])->name('cars.mots.destroy');
     Route::delete('cars/{car}/road-taxes/{car_road_tax}', [App\Http\Controllers\Backend\CarController::class, 'destroyRoadTax'])->name('cars.road-taxes.destroy');

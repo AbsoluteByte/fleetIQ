@@ -71,6 +71,14 @@
                                 <strong>Seller Name:</strong>
                                 <p class="mb-0">{{ $car->seller_name ?? '—' }}</p>
                             </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Fleet Status:</strong>
+                                <p class="mb-0">{{ ucwords(str_replace('_', ' ', $car->fleet_status ?? 'available_for_rent')) }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Available From:</strong>
+                                <p class="mb-0">{{ $car->available_from_date ? $car->available_from_date->format('d M, Y') : 'Now' }}</p>
+                            </div>
                             @if($car->seller_notes)
                                 <div class="col-12 mb-3">
                                     <strong>Seller Notes:</strong>
@@ -107,8 +115,8 @@
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ asset('uploads/cars/' . $car->v5_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                            <i class="fa fa-file-pdf"></i> View Document
+                                        <a href="{{ route('cars.download.v5', $car) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <i class="fa fa-file-pdf"></i> Download Document
                                         </a>
                                     </p>
                                 </div>
@@ -147,8 +155,8 @@
                                                     <td>{{ $latestMot->term }}</td>
                                                     <td>
                                                         @if($latestMot->document)
-                                                            <a href="{{ asset('uploads/cars/mot_documents/' . $latestMot->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> View
+                                                            <a href="{{ route('cars.mots.download', [$car, $latestMot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                                <i class="fa fa-file"></i> Download
                                                             </a>
                                                         @else
                                                             <span class="text-muted">No Document</span>
@@ -192,7 +200,7 @@
                                                         <td>{{ $mot->term }}</td>
                                                         <td>
                                                             @if($mot->document)
-                                                                <a href="{{ asset('uploads/cars/mot_documents/' . $mot->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                                <a href="{{ route('cars.mots.download', [$car, $mot->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -307,6 +315,7 @@
                                                 <th>Expiry Date</th>
                                                 <th>Amount</th>
                                                 <th>Notify Before</th>
+                                                <th>Applied</th>
                                                 <th>Document</th>
                                             </tr>
                                             </thead>
@@ -318,9 +327,18 @@
                                                     <td>£{{ number_format($latestPhv->amount, 2) }}</td>
                                                     <td>{{ $latestPhv->notify_before_expiry }} days</td>
                                                     <td>
+                                                        {{ $latestPhv->phv_applied ? 'Yes' : 'No' }}
+                                                        @if($latestPhv->phv_applied_date)
+                                                            <br><small>{{ $latestPhv->phv_applied_date->format('d M, Y') }}</small>
+                                                        @endif
+                                                        @if($latestPhv->phvAppliedBy)
+                                                            <br><small>By {{ $latestPhv->phvAppliedBy->name }}</small>
+                                                        @endif
+                                                    </td>
+                                                    <td>
                                                         @if($latestPhv->document)
-                                                            <a href="{{ asset('uploads/cars/phv_documents/' . $latestPhv->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fa fa-file"></i> View
+                                                            <a href="{{ route('cars.phvs.download', [$car, $latestPhv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                                <i class="fa fa-file"></i> Download
                                                             </a>
                                                         @else
                                                             <span class="text-muted">No Document</span>
@@ -355,6 +373,7 @@
                                                         <th>Expiry</th>
                                                         <th>Amount</th>
                                                         <th>Notify</th>
+                                                        <th>Applied</th>
                                                         <th>Document</th>
                                                     </tr>
                                                 </thead>
@@ -367,8 +386,14 @@
                                                         <td>£{{ number_format($phv->amount, 2) }}</td>
                                                         <td>{{ $phv->notify_before_expiry }} days</td>
                                                         <td>
+                                                            {{ $phv->phv_applied ? 'Yes' : 'No' }}
+                                                            @if($phv->phv_applied_date)
+                                                                <br><small>{{ $phv->phv_applied_date->format('d M, Y') }}</small>
+                                                            @endif
+                                                        </td>
+                                                        <td>
                                                             @if($phv->document)
-                                                                <a href="{{ asset('uploads/cars/phv_documents/' . $phv->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                                <a href="{{ route('cars.phvs.download', [$car, $phv->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
                                                             @else
                                                                 <span class="text-muted">—</span>
                                                             @endif
@@ -488,6 +513,69 @@
                             </div>
                         </div>
                         @endif
+
+                        <!-- Service and Reservation Information -->
+                        @php
+                            $latestService = $car->latestService();
+                            $activeReservation = $car->activeReservation();
+                        @endphp
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2 mb-3">Service Information</h4>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Latest Service:</strong>
+                                <p class="mb-0">{{ $latestService ? $latestService->service_date->format('d M, Y') : '—' }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <strong>Next Service Due:</strong>
+                                <p class="mb-0">{{ $latestService ? $latestService->service_date->copy()->addMonths(3)->format('d M, Y') : '—' }}</p>
+                            </div>
+                            @if($latestService && $latestService->notes)
+                                <div class="col-12 mb-3">
+                                    <strong>Service Notes:</strong>
+                                    <p class="mb-0" style="white-space: pre-wrap;">{{ $latestService->notes }}</p>
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2 mb-3">Reservation Information</h4>
+                            </div>
+                            @if($activeReservation)
+                                <div class="col-md-6 mb-3">
+                                    <strong>Customer:</strong>
+                                    <p class="mb-0">{{ $activeReservation->customer_name }}</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <strong>Reservation Date:</strong>
+                                    <p class="mb-0">{{ $activeReservation->reservation_date->format('d M, Y') }}</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <strong>Phone:</strong>
+                                    <p class="mb-0">{{ $activeReservation->customer_phone ?? '—' }}</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <strong>Email:</strong>
+                                    <p class="mb-0">{{ $activeReservation->customer_email ?? '—' }}</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <strong>Available From:</strong>
+                                    <p class="mb-0">{{ $activeReservation->available_from_date ? $activeReservation->available_from_date->format('d M, Y') : '—' }}</p>
+                                </div>
+                                @if($activeReservation->terms_conditions)
+                                    <div class="col-12 mb-3">
+                                        <strong>Terms & Conditions:</strong>
+                                        <p class="mb-0" style="white-space: pre-wrap;">{{ $activeReservation->terms_conditions }}</p>
+                                    </div>
+                                @endif
+                            @else
+                                <div class="col-12">
+                                    <p class="text-muted">No active reservation.</p>
+                                </div>
+                            @endif
+                        </div>
 
                         <!-- Timestamps -->
                         <div class="row">

@@ -100,6 +100,41 @@
                     @enderror
                 </div>
             </div>
+
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="termination_notice_date" class="form-label">Termination Notice Date</label>
+                    <input type="date" name="termination_notice_date" id="termination_notice_date"
+                           class="form-control @error('termination_notice_date') is-invalid @enderror"
+                           value="{{ old('termination_notice_date') ?? (isset($model) && $model->termination_notice_date ? $model->termination_notice_date->format('Y-m-d') : '') }}">
+                    @error('termination_notice_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="termination_available_from_date" class="form-label">Car Available From</label>
+                    <input type="date" name="termination_available_from_date" id="termination_available_from_date"
+                           class="form-control @error('termination_available_from_date') is-invalid @enderror"
+                           value="{{ old('termination_available_from_date') ?? (isset($model) && $model->termination_available_from_date ? $model->termination_available_from_date->format('Y-m-d') : '') }}">
+                    @error('termination_available_from_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="mb-3">
+                    <label for="termination_notes" class="form-label">Termination Notes</label>
+                    <textarea name="termination_notes" id="termination_notes" rows="2"
+                              class="form-control @error('termination_notes') is-invalid @enderror">{{ old('termination_notes') ?? (isset($model) ? $model->termination_notes : '') }}</textarea>
+                    @error('termination_notes')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
         </div>
     </div>
 </div>

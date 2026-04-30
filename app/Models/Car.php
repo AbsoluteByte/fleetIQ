@@ -16,6 +16,7 @@ class Car extends Model
         'seller_notes', 'log_book_applied', 'log_book_applied_date', 'old_log_book',
         'log_book_applied_by',
         'sorn_applied', 'sorn_applied_at', 'sorn_applied_by',
+        'fleet_status', 'available_from_date',
         'createdBy', 'updatedBy',
     ];
 
@@ -26,6 +27,7 @@ class Car extends Model
         'log_book_applied_date' => 'date',
         'sorn_applied' => 'boolean',
         'sorn_applied_at' => 'datetime',
+        'available_from_date' => 'date',
     ];
 
     // ==================== RELATIONSHIPS ====================
@@ -90,6 +92,16 @@ class Car extends Model
         return $this->hasMany(CarInsurance::class);
     }
 
+    public function services()
+    {
+        return $this->hasMany(CarService::class);
+    }
+
+    public function reservations()
+    {
+        return $this->hasMany(CarReservation::class);
+    }
+
     // ==================== SCOPES ====================
 
     // ✅ Scope for specific tenant
@@ -135,5 +147,61 @@ class Car extends Model
         }
 
         return $insurance->expiry_date->copy()->startOfDay()->gte(now()->startOfDay());
+    }
+
+    public function latestService()
+    {
+        return $this->services
+            ->sortByDesc(fn (CarService $service) => [optional($service->service_date)->timestamp ?? 0, $service->id])
+            ->first();
+    }
+
+    public function nextServiceDueDate()
+    {
+        $latest = $this->latestService();
+
+        return $latest?->service_date?->copy()->addMonths(3);
+    }
+
+    public function activeReservation()
+    {
+        return $this->reservations
+            ->where('status', 'active')
+            ->sortByDesc(fn (CarReservation $reservation) => [optional($reservation->reservation_date)->timestamp ?? 0, $reservation->id])
+            ->first();
+    }
+
+    public function isPhvCurrentlyActive(): bool
+    {
+        $phv = $this->phvs
+            ->sortByDesc(fn (CarPhv $p) => [optional($p->expiry_date)->timestamp ?? 0, $p->id])
+            ->first();
+
+        return (bool) ($phv?->expiry_date && $phv->expiry_date->copy()->startOfDay()->gte(now()->startOfDay()));
+    }
+
+    public function isAvailableForRent(): bool
+    {
+        if ($this->sorn_applied || $this->activeReservation()) {
+            return false;
+        }
+
+        if (in_array($this->fleet_status, ['damaged', 'written_off', 'stolen', 'for_sale', 'sold', 'reserved'], true)) {
+            return false;
+        }
+
+        if ($this->available_from_date && $this->available_from_date->copy()->startOfDay()->gt(now()->startOfDay())) {
+            return false;
+        }
+
+        $hasActiveAgreement = $this->agreements
+            ->filter(function (Agreement $agreement) {
+                return $agreement->start_date?->copy()->startOfDay()->lte(now()->startOfDay())
+                    && $agreement->end_date?->copy()->startOfDay()->gte(now()->startOfDay())
+                    && ! $agreement->termination_notice_date;
+            })
+            ->isNotEmpty();
+
+        return ! $hasActiveAgreement && $this->isInsuranceCurrentlyActive() && $this->isPhvCurrentlyActive();
     }
 }

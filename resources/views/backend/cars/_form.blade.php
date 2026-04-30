@@ -98,7 +98,7 @@
                    class="form-control @error('v5_document') is-invalid @enderror"
                    accept=".pdf,.jpg,.jpeg,.png">
             @if(isset($model) && $model->id && $model->v5_document)
-                <small class="text-muted">Current: <a href="{{ asset('uploads/cars/' . $model->v5_document) }}" target="_blank">View Document</a></small>
+                <small class="text-muted">Current: <a href="{{ route('cars.download.v5', $model) }}" target="_blank">Download Document</a></small>
             @endif
             @error('v5_document')
             <div class="invalid-feedback">{{ $message }}</div>
@@ -190,6 +190,39 @@
                    value="{{ old('seller_name') ?? (isset($model) && $model->id ? $model->seller_name : '') }}"
                    placeholder="e.g. John Smith (optional)">
             @error('seller_name')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
+    @php
+        $fleetStatus = old('fleet_status', isset($model) && $model->id ? ($model->fleet_status ?? 'available_for_rent') : 'available_for_rent');
+    @endphp
+    <div class="col-md-6">
+        <div class="form-group">
+            <label for="fleet_status">Fleet Status</label>
+            <select name="fleet_status" id="fleet_status" class="form-control @error('fleet_status') is-invalid @enderror">
+                <option value="available_for_rent" {{ $fleetStatus === 'available_for_rent' ? 'selected' : '' }}>Available for rent</option>
+                <option value="damaged" {{ $fleetStatus === 'damaged' ? 'selected' : '' }}>Damaged</option>
+                <option value="written_off" {{ $fleetStatus === 'written_off' ? 'selected' : '' }}>Written off</option>
+                <option value="stolen" {{ $fleetStatus === 'stolen' ? 'selected' : '' }}>Stolen</option>
+                <option value="for_sale" {{ $fleetStatus === 'for_sale' ? 'selected' : '' }}>For sale</option>
+                <option value="sold" {{ $fleetStatus === 'sold' ? 'selected' : '' }}>Sold</option>
+                <option value="reserved" {{ $fleetStatus === 'reserved' ? 'selected' : '' }}>Reserved</option>
+            </select>
+            @error('fleet_status')
+            <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="form-group">
+            <label for="available_from_date">Available From</label>
+            <input type="date" name="available_from_date" id="available_from_date"
+                class="form-control @error('available_from_date') is-invalid @enderror"
+                value="{{ old('available_from_date') ?? (isset($model) && $model->id && $model->available_from_date ? $model->available_from_date->format('Y-m-d') : '') }}">
+            @error('available_from_date')
             <div class="invalid-feedback">{{ $message }}</div>
             @enderror
         </div>
@@ -359,7 +392,13 @@
                                            class="form-control @error('mots.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($mot) && $mot->document) || (isset($mot['document']) && $mot['document']))
-                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document'])) }}" target="_blank">View</a></small>
+                                        <small class="text-muted">Current:
+                                            @if(isset($model) && $model->id && is_object($mot) && isset($mot->id))
+                                                <a href="{{ route('cars.mots.download', [$model, $mot->id]) }}" target="_blank">Download</a>
+                                            @else
+                                                <a href="{{ asset('uploads/cars/mot_documents/' . (is_object($mot) ? $mot->document : $mot['document'])) }}" target="_blank">View</a>
+                                            @endif
+                                        </small>
                                     @endif
                                     @error('mots.'.$index.'.document')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -431,7 +470,7 @@
                                 <td>{{ $motH->term }}</td>
                                 <td>
                                     @if($motH->document)
-                                        <a href="{{ asset('uploads/cars/mot_documents/' . $motH->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                        <a href="{{ route('cars.mots.download', [$model, $motH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -849,9 +888,39 @@
                                            class="form-control @error('phvs.'.$index.'.document') is-invalid @enderror"
                                            accept=".pdf,.jpg,.jpeg,.png">
                                     @if((is_object($phv) && $phv->document) || (isset($phv['document']) && $phv['document']))
-                                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document'])) }}" target="_blank">View</a></small>
+                                        <small class="text-muted">Current:
+                                            @if(isset($model) && $model->id && is_object($phv) && isset($phv->id))
+                                                <a href="{{ route('cars.phvs.download', [$model, $phv->id]) }}" target="_blank">Download</a>
+                                            @else
+                                                <a href="{{ asset('uploads/cars/phv_documents/' . (is_object($phv) ? $phv->document : $phv['document'])) }}" target="_blank">View</a>
+                                            @endif
+                                        </small>
                                     @endif
                                     @error('phvs.'.$index.'.document')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="form-group mb-2">
+                                    <label>&nbsp;</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input phv-applied-checkbox"
+                                               name="phvs[{{ $index }}][phv_applied]" value="1"
+                                               {{ old('phvs.'.$index.'.phv_applied', is_object($phv) && ($phv->phv_applied ?? false)) ? 'checked' : '' }}>
+                                        <label class="form-check-label">PHV applied</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label>PHV Applied Date</label>
+                                    <input type="date" name="phvs[{{ $index }}][phv_applied_date]"
+                                           class="form-control phv-applied-date @error('phvs.'.$index.'.phv_applied_date') is-invalid @enderror"
+                                           value="{{ old('phvs.'.$index.'.phv_applied_date') ?? (is_object($phv) && $phv->phv_applied_date ? $phv->phv_applied_date->format('Y-m-d') : '') }}">
+                                    @error('phvs.'.$index.'.phv_applied_date')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -883,6 +952,8 @@
                                 <input type="hidden" name="phvs[{{ $hPhv }}][start_date]" value="{{ $phvP->start_date->format('Y-m-d') }}">
                                 <input type="hidden" name="phvs[{{ $hPhv }}][expiry_date]" value="{{ $phvP->expiry_date->format('Y-m-d') }}">
                                 <input type="hidden" name="phvs[{{ $hPhv }}][notify_before_expiry]" value="{{ $phvP->notify_before_expiry }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied]" value="{{ $phvP->phv_applied ? 1 : 0 }}">
+                                <input type="hidden" name="phvs[{{ $hPhv }}][phv_applied_date]" value="{{ $phvP->phv_applied_date ? $phvP->phv_applied_date->format('Y-m-d') : '' }}">
                             </div>
                             @php $hPhv++; @endphp
                         @endforeach
@@ -913,6 +984,7 @@
                                 <th>Expiry</th>
                                 <th>Amount</th>
                                 <th>Notify</th>
+                                <th>Applied</th>
                                 <th>Document</th>
                                 <th class="text-right" style="width:80px">Action</th>
                             </tr>
@@ -926,8 +998,14 @@
                                 <td>£{{ number_format($phvH->amount, 2) }}</td>
                                 <td>{{ $phvH->notify_before_expiry }} days</td>
                                 <td>
+                                    {{ $phvH->phv_applied ? 'Yes' : 'No' }}
+                                    @if($phvH->phv_applied_date)
+                                        <br><small>{{ $phvH->phv_applied_date->format('d M, Y') }}</small>
+                                    @endif
+                                </td>
+                                <td>
                                     @if($phvH->document)
-                                        <a href="{{ asset('uploads/cars/phv_documents/' . $phvH->document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                        <a href="{{ route('cars.phvs.download', [$model, $phvH->id]) }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
@@ -984,6 +1062,7 @@
                         View All
                     </button>
                 @endif
+                
             </div>
             <div class="card-body" id="insurance-section" style="display: none;">
                 <div class="row">
@@ -1129,6 +1208,121 @@
     </div>
 </div>
 @endif
+
+@php
+    $latestServiceForForm = isset($model) && $model->id ? $model->latestService() : null;
+    $activeReservationForForm = isset($model) && $model->id ? $model->activeReservation() : null;
+    $reserveCarChecked = old('reserve_car', $activeReservationForForm ? 1 : 0);
+@endphp
+
+{{-- Service Information --}}
+<div class="row mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fa fa-wrench"></i> Service Information</h5>
+            </div>
+            <div class="card-body">
+                @if($latestServiceForForm)
+                    <div class="alert alert-info">
+                        Latest service: {{ $latestServiceForForm->service_date->format('d M, Y') }}.
+                        Next service due: {{ $latestServiceForForm->service_date->copy()->addMonths(3)->format('d M, Y') }}.
+                    </div>
+                @endif
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="service_date">New Service Date</label>
+                            <input type="date" name="service_date" id="service_date" class="form-control @error('service_date') is-invalid @enderror" value="{{ old('service_date') }}">
+                            @error('service_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="service_mileage">Mileage</label>
+                            <input type="number" name="service_mileage" id="service_mileage" class="form-control @error('service_mileage') is-invalid @enderror" value="{{ old('service_mileage') }}" min="0">
+                            @error('service_mileage')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="service_document">Service Document</label>
+                            <input type="file" name="service_document" id="service_document" class="form-control @error('service_document') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png">
+                            @error('service_document')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-group mb-0">
+                            <label for="service_notes">Service Notes</label>
+                            <textarea name="service_notes" id="service_notes" rows="2" class="form-control @error('service_notes') is-invalid @enderror">{{ old('service_notes') }}</textarea>
+                            @error('service_notes')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Reservation Information --}}
+<div class="row mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="reserve_car" name="reserve_car" value="1" {{ $reserveCarChecked ? 'checked' : '' }}>
+                    <label class="form-check-label" for="reserve_car"><strong>Reserve this car for a customer</strong></label>
+                </div>
+            </div>
+            <div class="card-body" id="reservation-section" style="display: none;">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="reservation_customer_name">Customer Name</label>
+                            <input type="text" name="reservation_customer_name" id="reservation_customer_name" class="form-control @error('reservation_customer_name') is-invalid @enderror" value="{{ old('reservation_customer_name', $activeReservationForForm->customer_name ?? '') }}">
+                            @error('reservation_customer_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="reservation_customer_phone">Customer Phone</label>
+                            <input type="text" name="reservation_customer_phone" id="reservation_customer_phone" class="form-control @error('reservation_customer_phone') is-invalid @enderror" value="{{ old('reservation_customer_phone', $activeReservationForForm->customer_phone ?? '') }}">
+                            @error('reservation_customer_phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="reservation_customer_email">Customer Email</label>
+                            <input type="email" name="reservation_customer_email" id="reservation_customer_email" class="form-control @error('reservation_customer_email') is-invalid @enderror" value="{{ old('reservation_customer_email', $activeReservationForForm->customer_email ?? '') }}">
+                            @error('reservation_customer_email')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="reservation_date">Reservation Date</label>
+                            <input type="date" name="reservation_date" id="reservation_date" class="form-control @error('reservation_date') is-invalid @enderror" value="{{ old('reservation_date', $activeReservationForForm?->reservation_date?->format('Y-m-d')) }}">
+                            @error('reservation_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="reservation_available_from_date">Available From</label>
+                            <input type="date" name="reservation_available_from_date" id="reservation_available_from_date" class="form-control @error('reservation_available_from_date') is-invalid @enderror" value="{{ old('reservation_available_from_date', $activeReservationForForm?->available_from_date?->format('Y-m-d')) }}">
+                            @error('reservation_available_from_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-group mb-0">
+                            <label for="reservation_terms_conditions">Terms & Conditions</label>
+                            <textarea name="reservation_terms_conditions" id="reservation_terms_conditions" rows="3" class="form-control @error('reservation_terms_conditions') is-invalid @enderror">{{ old('reservation_terms_conditions', $activeReservationForForm->terms_conditions ?? '') }}</textarea>
+                            @error('reservation_terms_conditions')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 {{-- Submit Button --}}
 <div class="row mt-4">
@@ -1290,6 +1484,30 @@
             }
         }
 
+        function toggleReservationSection() {
+            const cb = document.getElementById('reserve_car');
+            const section = document.getElementById('reservation-section');
+            const reservationDate = document.getElementById('reservation_date');
+            if (!cb || !section) return;
+            section.style.display = cb.checked ? 'block' : 'none';
+            if (cb.checked && reservationDate && !reservationDate.value) {
+                reservationDate.value = todayYmd;
+            }
+        }
+
+        function bindPhvAppliedDefaults(scope) {
+            (scope || document).querySelectorAll('.phv-applied-checkbox').forEach(function (checkbox) {
+                checkbox.addEventListener('change', function () {
+                    const row = checkbox.closest('.phv-item');
+                    const dateInput = row ? row.querySelector('.phv-applied-date') : null;
+                    if (checkbox.checked && dateInput && !dateInput.value) {
+                        dateInput.value = todayYmd;
+                    }
+                });
+                checkbox.dispatchEvent(new Event('change'));
+            });
+        }
+
         const allInsuranceProviders = @json($insuranceProviders->map(function($provider) {
             return [
                 'id' => $provider->id,
@@ -1349,6 +1567,8 @@
             filterInsuranceProviders();
             toggleInsuranceSection();
             toggleLogBookSection();
+            toggleReservationSection();
+            bindPhvAppliedDefaults(document);
             (function defaultEmptyAppliedDate() {
                 const dateInput = document.getElementById('log_book_applied_date');
                 const cb = document.getElementById('log_book_applied');
@@ -1360,6 +1580,7 @@
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
             document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
+            document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
         });
 
         function addMOT() {
@@ -1522,6 +1743,21 @@
                     <input type="file" name="phvs[${phvIndex}][document]" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
                 </div>
             </div>
+            <div class="col-md-3">
+                <div class="form-group mb-2">
+                    <label>&nbsp;</label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input phv-applied-checkbox" name="phvs[${phvIndex}][phv_applied]" value="1">
+                        <label class="form-check-label">PHV applied</label>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label>PHV Applied Date</label>
+                    <input type="date" name="phvs[${phvIndex}][phv_applied_date]" class="form-control phv-applied-date">
+                </div>
+            </div>
             <div class="col-md-1">
                 <div class="form-group">
                     <label>&nbsp;</label>
@@ -1535,6 +1771,7 @@
         </div>
     `;
             container.insertAdjacentHTML('beforeend', newPHV);
+            bindPhvAppliedDefaults(container.lastElementChild);
             phvIndex++;
         }
 

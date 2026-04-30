@@ -101,6 +101,9 @@ class AgreementController extends Controller
             'own_insurance_type' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_policy_number' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'termination_notice_date' => 'nullable|date',
+            'termination_available_from_date' => 'nullable|date',
+            'termination_notes' => 'nullable|string',
             // Collections (only validate when auto_schedule_collections is false AND collections data exists)
             'collections' => 'array',
             'collections.*.date' => 'required_if:auto_schedule_collections,0|nullable|date',
@@ -121,7 +124,9 @@ class AgreementController extends Controller
                 // Create agreement record
                 $validated['tenant_id'] = $tenant->id;
                 $validated['createdBy'] = Auth::id();
+                $validated = $this->mergeTerminationData($validated);
                 $agreement = Agreement::create($validated);
+                $this->syncTerminatedCarAvailability($agreement);
 
                 // Handle collections based on auto schedule setting
                 if ($validated['auto_schedule_collections']) {
@@ -161,7 +166,7 @@ class AgreementController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
         $agreement->load([
-            'company', 'driver', 'car', 'status', 'insuranceProvider',
+            'company', 'driver', 'car', 'status', 'insuranceProvider', 'terminationRecordedBy',
             'collections' => function ($query) {
                 $query->orderBy('due_date');
             }
@@ -224,6 +229,9 @@ class AgreementController extends Controller
             'own_insurance_type' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_policy_number' => 'required_if:using_own_insurance,1|nullable|string|max:255',
             'own_insurance_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'termination_notice_date' => 'nullable|date',
+            'termination_available_from_date' => 'nullable|date',
+            'termination_notes' => 'nullable|string',
             // Collections (only validate when auto_schedule_collections is false AND collections data exists)
             'collections' => 'array',
             'collections.*.date' => 'required_if:auto_schedule_collections,0|nullable|date',
@@ -254,7 +262,9 @@ class AgreementController extends Controller
                 // Update agreement record
                 $validated['tenant_id'] = $tenant->id;
                 $validated['updatedBy'] = Auth::id();
+                $validated = $this->mergeTerminationData($validated, $agreement);
                 $agreement->update($validated);
+                $this->syncTerminatedCarAvailability($agreement);
 
                 // Handle collections based on auto schedule setting
                 if ($validated['auto_schedule_collections']) {
@@ -321,6 +331,36 @@ class AgreementController extends Controller
             return redirect()->back()
                 ->with('error', 'Error deleting agreement: ' . $e->getMessage());
         }
+    }
+
+    private function mergeTerminationData(array $validated, ?Agreement $existing = null): array
+    {
+        if (empty($validated['termination_notice_date'])) {
+            $validated['termination_available_from_date'] = null;
+            $validated['termination_notes'] = null;
+            $validated['termination_recorded_by'] = null;
+
+            return $validated;
+        }
+
+        $validated['termination_recorded_by'] = $existing && $existing->termination_recorded_by
+            ? $existing->termination_recorded_by
+            : Auth::id();
+
+        return $validated;
+    }
+
+    private function syncTerminatedCarAvailability(Agreement $agreement): void
+    {
+        if (! $agreement->termination_notice_date || ! $agreement->car) {
+            return;
+        }
+
+        $agreement->car->update([
+            'fleet_status' => 'available_for_rent',
+            'available_from_date' => $agreement->termination_available_from_date,
+            'updatedBy' => Auth::id(),
+        ]);
     }
 
     public function payCollection(Request $request, Agreement $agreement, $collectionId)

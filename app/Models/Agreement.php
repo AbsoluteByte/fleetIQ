@@ -27,7 +27,11 @@ class Agreement extends Model
         'hellosign_status',
         'esign_sent_at',
         'esign_completed_at',
-        'esign_document_path'
+        'esign_document_path',
+        'termination_notice_date',
+        'termination_available_from_date',
+        'termination_notes',
+        'termination_recorded_by',
     ];
 
     protected $casts = [
@@ -46,6 +50,8 @@ class Agreement extends Model
         // New e-signature casts
         'esign_sent_at' => 'datetime',
         'esign_completed_at' => 'datetime',
+        'termination_notice_date' => 'date',
+        'termination_available_from_date' => 'date',
     ];
 
     public function company()
@@ -66,6 +72,11 @@ class Agreement extends Model
     public function status()
     {
         return $this->belongsTo(Status::class);
+    }
+
+    public function terminationRecordedBy()
+    {
+        return $this->belongsTo(User::class, 'termination_recorded_by');
     }
 
     public function insuranceProvider()
