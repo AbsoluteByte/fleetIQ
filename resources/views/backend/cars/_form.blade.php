@@ -583,11 +583,11 @@
                 @endif
                 @if($isCarEdit)
                     @if($model->sorn_applied)
-                        <button type="button" class="btn btn-sm btn-success mr-1" data-toggle="modal" data-target="#sornDetailsModal" title="View SORN details">
+                        <button type="button" id="carSornToolbarBtn" class="btn btn-sm btn-success mr-1" data-toggle="modal" data-target="#sornDetailsModal" title="View SORN details" data-sorn-toolbar-state="applied">
                             <i class="fa fa-check"></i> SORN Applied
                         </button>
                     @else
-                        <button type="button" class="btn btn-sm btn-outline-success mr-1" data-toggle="modal" data-target="#applySornModal">
+                        <button type="button" id="carSornToolbarBtn" class="btn btn-sm btn-outline-success mr-1" data-toggle="modal" data-target="#applySornModal" data-sorn-toolbar-state="apply">
                             <i class="fa fa-road"></i> Apply SORN
                         </button>
                     @endif
@@ -698,7 +698,7 @@
             </div>
             <div class="modal-body">
                 <p class="mb-0 text-body">Are you sure you want to apply SORN for this car?</p>
-                <p class="small text-muted mt-1 mb-0">If you continue, the vehicle will be recorded as off the road in FleetIQ and you will be redirected to <strong>GOV.UK</strong> to complete the statutory notification (SORN) where required.</p>
+                <p class="small text-muted mt-1 mb-0">If you continue, FleetIQ will record this vehicle as off the road. You can open <strong>GOV.UK</strong> from the confirmation message afterwards if you still need to complete the statutory notification there.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
@@ -707,6 +707,77 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="sornAppliedSuccessModal" tabindex="-1" role="dialog" aria-labelledby="sornAppliedSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0" id="sornAppliedSuccessModalLabel">
+                    <i class="fa fa-check-circle text-success mr-50"></i> SORN recorded
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 text-body">This car is now marked as SORN in FleetIQ.</p>
+                <p class="small text-muted mt-2 mb-0">If you need to complete the notification on GOV.UK, use the link below (opens in a new tab). You can close this message when you are done.</p>
+            </div>
+            <div class="modal-footer flex-wrap justify-content-between">
+                <a href="#" id="sornSuccessGovLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary mb-1 mb-sm-0">
+                    <i class="fa fa-external-link mr-50"></i> Open GOV.UK (make a SORN)
+                </a>
+                <button type="button" class="btn btn-success" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="tplSornAppliedModals">
+    <div class="modal fade" id="sornDetailsModal" tabindex="-1" role="dialog" aria-labelledby="sornDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 32rem;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title mb-0" id="sornDetailsModalLabel">
+                        <i class="fa fa-check-circle text-success mr-50"></i> SORN applied
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0 text-body" id="sornDetailsModalBodyLine" style="line-height: 1.65;"></p>
+                </div>
+                <div class="modal-footer flex-wrap">
+                    <button type="button" class="btn btn-outline-danger mr-auto mb-1 mb-sm-0" id="sornDetailsEndSornBtn">End SORN</button>
+                    <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="endSornConfirmModal" tabindex="-1" role="dialog" aria-labelledby="endSornConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title mb-0" id="endSornConfirmModalLabel">
+                        <i class="fa fa-exclamation-triangle text-warning mr-50"></i> End SORN?
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0 text-body">Are you sure you want to remove the SORN status for this car in FleetIQ?</p>
+                    <p class="mt-3 mb-0 rounded p-75" style="font-size:1.0625rem;line-height:1.58;color:#1e293b;"><strong style="color:#0f172a;">Reminder:</strong> Before this vehicle is used or kept on a public road again, you must pay vehicle tax (road tax) and meet the usual legal requirements (e.g. MOT and insurance where applicable).</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="endSornConfirmBtn">Yes, end SORN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
 @endif
 
 @if($isCarEdit && $model->sorn_applied)
@@ -744,8 +815,32 @@
                     @endif
                 </p>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer flex-wrap">
+                <button type="button" class="btn btn-outline-danger mr-auto mb-1 mb-sm-0" id="sornDetailsEndSornBtn">End SORN</button>
                 <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="endSornConfirmModal" tabindex="-1" role="dialog" aria-labelledby="endSornConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0" id="endSornConfirmModalLabel">
+                    <i class="fa fa-exclamation-triangle text-warning mr-50"></i> End SORN?
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 text-body">Are you sure you want to remove the SORN status for this car in FleetIQ?</p>
+                <p class="mt-3 mb-0 rounded p-75" style="font-size:1.0625rem;line-height:1.58;color:#1e293b;"><strong style="color:#0f172a;">Reminder:</strong> Before this vehicle is used or kept on a public road again, you must pay vehicle tax (road tax) and meet the usual legal requirements (e.g. MOT and insurance where applicable).</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="endSornConfirmBtn">Yes, end SORN</button>
             </div>
         </div>
     </div>
@@ -1436,11 +1531,130 @@
 
         @if($isCarEdit)
         (function () {
-            @if( ! $model->sorn_applied)
+            var endSornUrl = {!! json_encode(route('cars.end-sorn', $model)) !!};
+
+            function escapeHtml(str) {
+                if (str == null || str === '') {
+                    return '';
+                }
+                var d = document.createElement('div');
+                d.textContent = String(str);
+                return d.innerHTML;
+            }
+
+            function buildSornDetailsBodyHtml(byName, atFormatted) {
+                if (byName) {
+                    var html = '<strong>' + escapeHtml(byName) + '</strong> applied for SORN for this car';
+                    if (atFormatted) {
+                        html += ' on <strong>' + escapeHtml(atFormatted) + '</strong>';
+                    }
+                    return html + '.';
+                }
+                var fallback = 'SORN was recorded for this car';
+                if (atFormatted) {
+                    fallback += ' on <strong>' + escapeHtml(atFormatted) + '</strong>';
+                }
+                return fallback + '.';
+            }
+
+            function attachFleetiqEndSornHandlers() {
+                var sornDetailsEndBtn = document.getElementById('sornDetailsEndSornBtn');
+                if (sornDetailsEndBtn && !sornDetailsEndBtn.dataset.fleetiqBound && window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
+                    sornDetailsEndBtn.dataset.fleetiqBound = '1';
+                    sornDetailsEndBtn.addEventListener('click', function () {
+                        window.jQuery('#sornDetailsModal').one('hidden.bs.modal', function () {
+                            window.jQuery('#endSornConfirmModal').modal('show');
+                        });
+                        window.jQuery('#sornDetailsModal').modal('hide');
+                    });
+                }
+                var endSornConfirmBtnEl = document.getElementById('endSornConfirmBtn');
+                if (endSornConfirmBtnEl && !endSornConfirmBtnEl.dataset.fleetiqBound) {
+                    endSornConfirmBtnEl.dataset.fleetiqBound = '1';
+                    endSornConfirmBtnEl.addEventListener('click', function () {
+                        var overlay = document.getElementById('sornApplyOverlay');
+                        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
+                            window.jQuery('#endSornConfirmModal').modal('hide');
+                        }
+                        if (overlay) {
+                            overlay.classList.remove('d-none');
+                            overlay.classList.add('d-flex');
+                        }
+                        fetch(endSornUrl, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Content-Type': 'application/json',
+                            },
+                            credentials: 'same-origin',
+                        }).then(function (r) {
+                            return r.json().then(function (data) {
+                                if (!r.ok) {
+                                    throw new Error((data && data.message) || 'Request failed');
+                                }
+                                return data;
+                            });
+                        }).then(function (data) {
+                            if (data.ok) {
+                                window.location.reload();
+                            } else {
+                                throw new Error();
+                            }
+                        }).catch(function (err) {
+                            if (overlay) {
+                                overlay.classList.add('d-none');
+                                overlay.classList.remove('d-flex');
+                            }
+                            alert(err.message || 'Could not end SORN. Please try again.');
+                        });
+                    });
+                }
+            }
+
+            function mountSornModalsAfterApply(byName, atFormatted) {
+                if (document.getElementById('sornDetailsModal')) {
+                    return;
+                }
+                var tpl = document.getElementById('tplSornAppliedModals');
+                if (!tpl || !tpl.content) {
+                    return;
+                }
+                var frag = tpl.content.cloneNode(true);
+                var p = frag.querySelector('#sornDetailsModalBodyLine');
+                if (p) {
+                    p.innerHTML = buildSornDetailsBodyHtml(byName, atFormatted);
+                }
+                document.body.appendChild(frag);
+            }
+
+            function promoteSornToolbarButton() {
+                var toolbarBtn = document.getElementById('carSornToolbarBtn');
+                if (!toolbarBtn || toolbarBtn.getAttribute('data-sorn-toolbar-state') === 'applied') {
+                    return;
+                }
+                toolbarBtn.setAttribute('data-sorn-toolbar-state', 'applied');
+                toolbarBtn.type = 'button';
+                toolbarBtn.className = 'btn btn-sm btn-success mr-1';
+                toolbarBtn.setAttribute('data-toggle', 'modal');
+                toolbarBtn.setAttribute('data-target', '#sornDetailsModal');
+                toolbarBtn.setAttribute('title', 'View SORN details');
+                toolbarBtn.innerHTML = '<i class="fa fa-check"></i> SORN Applied';
+            }
+
+            function removeApplySornModal() {
+                var applyModalEl = document.getElementById('applySornModal');
+                if (applyModalEl) {
+                    applyModalEl.remove();
+                }
+            }
+
+            @if(!$model->sorn_applied)
             var applySornUrl = {!! json_encode(route('cars.apply-sorn', $model)) !!};
-            var sornBtn = document.getElementById('applySornConfirmBtn');
-            if (sornBtn) {
-                sornBtn.addEventListener('click', function () {
+            var applySornConfirmBtnEl = document.getElementById('applySornConfirmBtn');
+            if (applySornConfirmBtnEl) {
+                applySornConfirmBtnEl.addEventListener('click', function () {
                     var overlay = document.getElementById('sornApplyOverlay');
                     if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
                         window.jQuery('#applySornModal').modal('hide');
@@ -1452,7 +1666,9 @@
                             m.style.display = 'none';
                             document.body.classList.remove('modal-open');
                             var bd = document.querySelectorAll('.modal-backdrop');
-                            bd.forEach(function (el) { el.remove(); });
+                            bd.forEach(function (el) {
+                                el.remove();
+                            });
                         }
                     }
                     if (overlay) {
@@ -1476,10 +1692,23 @@
                             return data;
                         });
                     }).then(function (data) {
-                        if (data.ok && data.redirect) {
-                            window.location.href = data.redirect;
-                        } else {
+                        if (overlay) {
+                            overlay.classList.add('d-none');
+                            overlay.classList.remove('d-flex');
+                        }
+                        if (!(data.ok && data.gov_sorn_url)) {
                             throw new Error();
+                        }
+                        mountSornModalsAfterApply(data.sorn_applied_by_name, data.sorn_applied_at_formatted);
+                        removeApplySornModal();
+                        promoteSornToolbarButton();
+                        attachFleetiqEndSornHandlers();
+                        var successLink = document.getElementById('sornSuccessGovLink');
+                        if (successLink) {
+                            successLink.href = data.gov_sorn_url;
+                        }
+                        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal) {
+                            window.jQuery('#sornAppliedSuccessModal').modal('show');
                         }
                     }).catch(function (err) {
                         if (overlay) {
@@ -1490,6 +1719,8 @@
                     });
                 });
             }
+            @else
+            attachFleetiqEndSornHandlers();
             @endif
         })();
         @endif

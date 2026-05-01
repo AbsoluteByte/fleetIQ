@@ -665,8 +665,33 @@ class CarController extends Controller
 
         return response()->json([
             'ok' => true,
-            'redirect' => 'https://www.gov.uk/make-a-sorn',
+            'gov_sorn_url' => 'https://www.gov.uk/make-a-sorn',
+            'sorn_applied_by_name' => Auth::user()?->name,
+            'sorn_applied_at_formatted' => now()->format('d M Y').' at '.now()->format('h:i A'),
         ]);
+    }
+
+    public function endSorn(Car $car)
+    {
+        $tenant = Auth::user()->currentTenant();
+        if (! $tenant || $car->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+        if (! $car->sorn_applied) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'SORN is not applied for this car.',
+            ], 422);
+        }
+
+        $car->update([
+            'sorn_applied' => false,
+            'sorn_applied_at' => null,
+            'sorn_applied_by' => null,
+            'updatedBy' => Auth::id(),
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 
     public function destroyMot(Car $car, int $car_mot)
