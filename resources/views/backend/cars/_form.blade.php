@@ -337,15 +337,21 @@
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
-                        <label for="old_log_book">Old log book</label>
-                        <input type="file" name="old_log_book" id="old_log_book"
+                        <label for="old_log_book">Old log book <span class="text-muted font-weight-normal">(multiple files)</span></label>
+                        <input type="file" name="old_log_book[]" id="old_log_book"
                             class="form-control @error('old_log_book') is-invalid @enderror"
                             accept=".pdf,.jpg,.jpeg,.png"
+                            multiple
                             @if($carHasV5Document) disabled @endif>
-                        @if(isset($model) && $model->id && $model->old_log_book)
-                            <small class="text-muted">Current: <a href="{{ asset('uploads/cars/log_book/' . $model->old_log_book) }}" target="_blank">View file</a></small>
+                        @if(isset($model) && $model->id && $model->oldLogBookFileNames() !== [])
+                            @foreach($model->oldLogBookFileNames() as $lbName)
+                                <small class="text-muted d-block mt-1">Current file {{ $loop->iteration }}: <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank">View</a></small>
+                            @endforeach
                         @endif
                         @error('old_log_book')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        @error('old_log_book.*')
                         <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>

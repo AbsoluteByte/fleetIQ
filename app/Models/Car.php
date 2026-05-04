@@ -26,6 +26,7 @@ class Car extends Model
         'purchase_price' => 'decimal:2',
         'log_book_applied' => 'boolean',
         'log_book_applied_date' => 'date',
+        'old_log_book' => 'array',
         'sorn_applied' => 'boolean',
         'sorn_applied_at' => 'datetime',
         'available_from_date' => 'date',
@@ -107,6 +108,19 @@ class Car extends Model
     public function reservations()
     {
         return $this->hasMany(CarReservation::class);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function oldLogBookFileNames(): array
+    {
+        $names = $this->old_log_book;
+
+        return array_values(array_filter(
+            is_array($names) ? $names : [],
+            fn ($n) => is_string($n) && $n !== ''
+        ));
     }
 
     // ==================== SCOPES ====================

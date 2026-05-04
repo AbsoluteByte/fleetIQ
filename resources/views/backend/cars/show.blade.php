@@ -85,33 +85,93 @@
                                     <p class="mb-0" style="white-space: pre-wrap;">{{ $car->seller_notes }}</p>
                                 </div>
                             @endif
-                            @if($car->log_book_applied)
+                            @php
+                                $hasV5Doc = filled($car->v5_document);
+                                $oldLogBookFiles = $car->oldLogBookFileNames();
+                                $hasOldLogBookFile = $oldLogBookFiles !== [];
+                                $logBookApplied = $car->log_book_applied;
+
+                                $logBookReceivedLayout = $hasV5Doc && $hasOldLogBookFile;
+                                $logBookAppliedOnlyLayout = ! $hasV5Doc && $logBookApplied;
+                                $logBookMissingNotice = ! $hasV5Doc && ! $logBookApplied && ! $hasOldLogBookFile;
+                            @endphp
+
+                            @if($logBookReceivedLayout)
+                                <div class="col-md-6 mb-3">
+                                    <strong>Log book status:</strong>
+                                    <p class="mb-0"><span class="badge badge-success">Received</span></p>
+                                </div>
                                 <div class="col-md-6 mb-3">
                                     <strong>Log book applied:</strong>
-                                    <p class="mb-0"><span class="badge badge-success">Yes</span></p>
+                                    <p class="mb-0">
+                                        @foreach($oldLogBookFiles as $lbName)
+                                            <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                                <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
+                                            </a>
+                                        @endforeach
+                                    </p>
+                                </div>
+                            @elseif($logBookAppliedOnlyLayout)
+                                <div class="col-md-6 mb-3">
+                                    <strong>Log book status:</strong>
+                                    <p class="mb-0"><span class="badge badge-success">Applied</span></p>
+                                    @if($car->logBookAppliedBy)
+                                        <strong class="d-block mt-3">Log book applied by:</strong>
+                                        <p class="mb-0">{{ $car->logBookAppliedBy->name ?? '—' }}</p>
+                                    @endif
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <strong>Applied Date:</strong>
                                     <p class="mb-0">{{ $car->log_book_applied_date ? $car->log_book_applied_date->format('d M, Y') : '—' }}</p>
+                                    @if($hasOldLogBookFile)
+                                        <strong class="d-block mt-3">Old log book:</strong>
+                                        <p class="mb-0">
+                                            @foreach($oldLogBookFiles as $lbName)
+                                                <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                                    <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
+                                                </a>
+                                            @endforeach
+                                        </p>
+                                    @endif
                                 </div>
-                                @if($car->logBookAppliedBy)
-                                    <div class="col-md-6 mb-3">
-                                        <strong>Log book applied by:</strong>
-                                        <p class="mb-0">{{ $car->logBookAppliedBy->name ?? '—' }}</p>
+                            @elseif($logBookMissingNotice)
+                                <div class="col-12 mb-3">
+                                    <div class="alert alert-danger mb-0" role="alert">
+                                        Log book missing
                                     </div>
+                                </div>
+                            @else
+                                {{-- Partial states e.g. V5 without old file, old file without applied, etc. --}}
+                                @if($logBookApplied)
+                                    <div class="col-md-6 mb-3">
+                                        <strong>Log book applied:</strong>
+                                        <p class="mb-0"><span class="badge badge-success">Yes</span></p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <strong>Applied Date:</strong>
+                                        <p class="mb-0">{{ $car->log_book_applied_date ? $car->log_book_applied_date->format('d M, Y') : '—' }}</p>
+                                    </div>
+                                    @if($car->logBookAppliedBy)
+                                        <div class="col-md-6 mb-3">
+                                            <strong>Log book applied by:</strong>
+                                            <p class="mb-0">{{ $car->logBookAppliedBy->name ?? '—' }}</p>
+                                        </div>
+                                    @endif
                                 @endif
-                                @if($car->old_log_book)
+                                @if($hasOldLogBookFile)
                                     <div class="col-md-6 mb-3">
                                         <strong>Old log book:</strong>
                                         <p class="mb-0">
-                                            <a href="{{ asset('uploads/cars/log_book/' . $car->old_log_book) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                <i class="fa fa-file"></i> View file
-                                            </a>
+                                            @foreach($oldLogBookFiles as $lbName)
+                                                <a href="{{ asset('uploads/cars/log_book/' . $lbName) }}" target="_blank" class="btn btn-sm btn-outline-primary mr-1 mb-1">
+                                                    <i class="fa fa-file"></i> View file @if(count($oldLogBookFiles) > 1)#{{ $loop->iteration }}@endif
+                                                </a>
+                                            @endforeach
                                         </p>
                                     </div>
                                 @endif
                             @endif
-                            @if($car->v5_document)
+                            @if($hasV5Doc)
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">

@@ -113,7 +113,8 @@ class CarController extends Controller
             'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
-            'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'old_log_book' => 'nullable|array',
+            'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
             'available_from_date' => 'nullable|date',
             'service_date' => 'nullable|date',
@@ -331,7 +332,8 @@ class CarController extends Controller
             'phv_applied_date' => 'nullable|date',
             'log_book_applied' => 'nullable|boolean',
             'log_book_applied_date' => 'nullable|date',
-            'old_log_book' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'old_log_book' => 'nullable|array',
+            'old_log_book.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
             'fleet_status' => 'nullable|in:available_for_rent,damaged,written_off,stolen,for_sale,sold,reserved',
             'available_from_date' => 'nullable|date',
             'service_date' => 'nullable|date',
@@ -997,8 +999,10 @@ class CarController extends Controller
         if (! $isApplied) {
             $carData['log_book_applied_date'] = null;
             $carData['log_book_applied_by'] = null;
-            if ($existing?->old_log_book) {
-                $this->deleteFile($existing->old_log_book, 'uploads/cars/log_book');
+            if ($existing) {
+                foreach ($existing->oldLogBookFileNames() as $name) {
+                    $this->deleteFile($name, 'uploads/cars/log_book');
+                }
             }
             $carData['old_log_book'] = null;
 
@@ -1014,17 +1018,32 @@ class CarController extends Controller
             $carData['log_book_applied_by'] = $existing->log_book_applied_by;
         }
 
-        if ($request->hasFile('old_log_book')) {
-            $name = $this->uploadFile($request->file('old_log_book'), 'uploads/cars/log_book');
-            if ($existing?->old_log_book) {
-                $this->deleteFile($existing->old_log_book, 'uploads/cars/log_book');
-            }
-            $carData['old_log_book'] = $name;
-        } elseif ($existing) {
-            $carData['old_log_book'] = $existing->old_log_book;
+        $names = $existing?->oldLogBookFileNames() ?? [];
+
+        foreach ($this->collectOldLogBookUploads($request) as $file) {
+            $names[] = $this->uploadFile($file, 'uploads/cars/log_book');
         }
 
+        $carData['old_log_book'] = $names === [] ? null : array_values(array_unique($names));
+
         return $carData;
+    }
+
+    /**
+     * @return list<\Illuminate\Http\UploadedFile>
+     */
+    private function collectOldLogBookUploads(Request $request): array
+    {
+        if (! $request->hasFile('old_log_book')) {
+            return [];
+        }
+
+        $files = $request->file('old_log_book');
+
+        return collect(is_array($files) ? $files : [$files])
+            ->filter(fn ($file) => $file && $file->isValid())
+            ->values()
+            ->all();
     }
 
     // ✅ Keep your existing helper methods
@@ -1096,8 +1115,10 @@ class CarController extends Controller
     {
         $filesToDelete = [
             $car->v5_document ? public_path('uploads/cars/' . $car->v5_document) : null,
-            $car->old_log_book ? public_path('uploads/cars/log_book/' . $car->old_log_book) : null,
         ];
+        foreach ($car->oldLogBookFileNames() as $lbName) {
+            $filesToDelete[] = public_path('uploads/cars/log_book/' . $lbName);
+        }
 
         foreach ($car->mots as $mot) {
             if ($mot->document) {
