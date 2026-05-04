@@ -96,7 +96,8 @@
             <label for="v5_document">V5 Document</label>
             <input type="file" name="v5_document" id="v5_document"
                    class="form-control @error('v5_document') is-invalid @enderror"
-                   accept=".pdf,.jpg,.jpeg,.png">
+                   accept=".pdf,.jpg,.jpeg,.png"
+                   data-has-v5="{{ isset($model) && $model->id && $model->v5_document ? '1' : '0' }}">
             @if(isset($model) && $model->id && $model->v5_document)
                 <small class="text-muted">Current: <a href="{{ route('cars.download.v5', $model) }}" target="_blank">Download Document</a></small>
             @endif
@@ -295,55 +296,72 @@
         </div>
     </div>
 
-    <div class="col-12">
+    @php
+        $logBookDate = old('log_book_applied_date');
+        if ($logBookDate === null) {
+            if (isset($model) && $model->id && $model->log_book_applied_date) {
+                $logBookDate = $model->log_book_applied_date->format('Y-m-d');
+            } else {
+                $logBookDate = '';
+            }
+        }
+        $logBookAppliedVal = filter_var(
+            old('log_book_applied', (isset($model) && $model->id) ? ($model->log_book_applied ?? false) : false),
+            FILTER_VALIDATE_BOOLEAN
+        );
+        $carHasV5Document = isset($model) && $model->id && $model->v5_document;
+    @endphp
+    <div class="col-12 @if($carHasV5Document) d-none @endif" id="log-book-ui-wrapper">
         <div class="form-group mb-2">
             <div class="form-check">
                 <input type="checkbox" class="form-check-input" id="log_book_applied" name="log_book_applied" value="1"
-                    {{ old('log_book_applied', $model->log_book_applied ?? false) ? 'checked' : '' }}>
+                    {{ $logBookAppliedVal ? 'checked' : '' }}
+                    @if($carHasV5Document) disabled @endif>
                 <label class="form-check-label" for="log_book_applied">Log book applied</label>
             </div>
         </div>
-    </div>
-    <div class="col-12" id="log-book-section"
-        style="display: {{ old('log_book_applied', $model->log_book_applied ?? false) ? 'block' : 'none' }};">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="log_book_applied_date">Applied Date</label>
-                    @php
-                        $logBookDate = old('log_book_applied_date');
-                        if ($logBookDate === null) {
-                            if (isset($model) && $model->id && $model->log_book_applied_date) {
-                                $logBookDate = $model->log_book_applied_date->format('Y-m-d');
-                            } else {
-                                $logBookDate = '';
-                            }
-                        }
-                    @endphp
-                    <input type="date" name="log_book_applied_date" id="log_book_applied_date"
-                        class="form-control @error('log_book_applied_date') is-invalid @enderror"
-                        value="{{ $logBookDate }}">
-                    @error('log_book_applied_date')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
+        <div id="log-book-section"
+            style="display: {{ $logBookAppliedVal ? 'block' : 'none' }};">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="log_book_applied_date">Applied Date</label>
+                        <input type="date" name="log_book_applied_date" id="log_book_applied_date"
+                            class="form-control @error('log_book_applied_date') is-invalid @enderror"
+                            value="{{ $logBookDate }}"
+                            @if($carHasV5Document) disabled @endif>
+                        @error('log_book_applied_date')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="old_log_book">Old log book</label>
-                    <input type="file" name="old_log_book" id="old_log_book"
-                        class="form-control @error('old_log_book') is-invalid @enderror"
-                        accept=".pdf,.jpg,.jpeg,.png">
-                    @if(isset($model) && $model->id && $model->old_log_book)
-                        <small class="text-muted">Current: <a href="{{ asset('uploads/cars/log_book/' . $model->old_log_book) }}" target="_blank">View file</a></small>
-                    @endif
-                    @error('old_log_book')
-                    <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="old_log_book">Old log book</label>
+                        <input type="file" name="old_log_book" id="old_log_book"
+                            class="form-control @error('old_log_book') is-invalid @enderror"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            @if($carHasV5Document) disabled @endif>
+                        @if(isset($model) && $model->id && $model->old_log_book)
+                            <small class="text-muted">Current: <a href="{{ asset('uploads/cars/log_book/' . $model->old_log_book) }}" target="_blank">View file</a></small>
+                        @endif
+                        @error('old_log_book')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    @if($carHasV5Document)
+        <div id="log-book-preservation-fields">
+            <input type="hidden" name="log_book_applied" value="{{ $logBookAppliedVal ? '1' : '0' }}">
+            @if($logBookAppliedVal)
+                <input type="hidden" name="log_book_applied_date" value="{{ $logBookDate }}">
+            @endif
+        </div>
+    @endif
+    <div id="log-book-js-preservation"></div>
 </div>
 
 @php
@@ -1727,10 +1745,19 @@
 
         const todayYmd = new Date().toISOString().slice(0, 10);
 
+        function shouldHideLogBookForV5() {
+            const el = document.getElementById('v5_document');
+            if (!el) return false;
+            if (el.getAttribute('data-has-v5') === '1') return true;
+            return !!(el.files && el.files.length);
+        }
+
         function toggleLogBookSection() {
+            if (shouldHideLogBookForV5()) return;
             const cb = document.getElementById('log_book_applied');
             const section = document.getElementById('log-book-section');
             const dateInput = document.getElementById('log_book_applied_date');
+            if (!cb || !section) return;
             if (cb.checked) {
                 section.style.display = 'block';
                 if (dateInput && !dateInput.value) {
@@ -1738,6 +1765,52 @@
                 }
             } else {
                 section.style.display = 'none';
+            }
+        }
+
+        function applyLogBookV5Rules() {
+            const wrapper = document.getElementById('log-book-ui-wrapper');
+            const preservation = document.getElementById('log-book-preservation-fields');
+            const jsPres = document.getElementById('log-book-js-preservation');
+            const cb = document.getElementById('log_book_applied');
+            const dateInput = document.getElementById('log_book_applied_date');
+            const fileInput = document.getElementById('old_log_book');
+            if (!wrapper || !jsPres) return;
+
+            const hide = shouldHideLogBookForV5();
+            const appliedWas = cb && cb.checked ? '1' : '0';
+            const dateWas = dateInput ? (dateInput.value || '') : '';
+
+            if (hide) {
+                wrapper.classList.add('d-none');
+                if (cb) cb.disabled = true;
+                if (dateInput) dateInput.disabled = true;
+                if (fileInput) fileInput.disabled = true;
+
+                if (preservation) {
+                    jsPres.innerHTML = '';
+                } else {
+                    jsPres.innerHTML = '';
+                    const h1 = document.createElement('input');
+                    h1.type = 'hidden';
+                    h1.name = 'log_book_applied';
+                    h1.value = appliedWas;
+                    jsPres.appendChild(h1);
+                    if (appliedWas === '1') {
+                        const h2 = document.createElement('input');
+                        h2.type = 'hidden';
+                        h2.name = 'log_book_applied_date';
+                        h2.value = dateWas;
+                        jsPres.appendChild(h2);
+                    }
+                }
+            } else {
+                wrapper.classList.remove('d-none');
+                if (cb) cb.disabled = false;
+                if (dateInput) dateInput.disabled = false;
+                if (fileInput) fileInput.disabled = false;
+                jsPres.innerHTML = '';
+                toggleLogBookSection();
             }
         }
 
@@ -1895,13 +1968,14 @@
         document.addEventListener('DOMContentLoaded', function() {
             filterInsuranceProviders();
             toggleInsuranceSection();
-            toggleLogBookSection();
+            applyLogBookV5Rules();
             toggleDamagedStatusSections();
             toggleReservationSection();
             togglePhvStatusFields();
             bindPhvExpiryStatusAutomation(document);
             preventEnterFormSubmit();
             (function defaultEmptyAppliedDate() {
+                if (shouldHideLogBookForV5()) return;
                 const dateInput = document.getElementById('log_book_applied_date');
                 const cb = document.getElementById('log_book_applied');
                 if (cb && cb.checked && dateInput && !dateInput.value) {
@@ -1911,7 +1985,11 @@
 
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
-            document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
+            const v5DocInput = document.getElementById('v5_document');
+            if (v5DocInput) {
+                v5DocInput.addEventListener('change', applyLogBookV5Rules);
+            }
+            document.getElementById('log_book_applied').addEventListener('change', applyLogBookV5Rules);
             document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
             document.getElementById('fleet_status').addEventListener('change', toggleDamagedStatusSections);
             document.getElementById('phv_status').addEventListener('change', togglePhvStatusFields);
