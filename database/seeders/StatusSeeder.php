@@ -1,8 +1,9 @@
 <?php
+
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Status;
+use Illuminate\Database\Seeder;
 
 class StatusSeeder extends Seeder
 {
@@ -27,8 +28,9 @@ class StatusSeeder extends Seeder
             ['name' => 'Disputed', 'type' => 'penalty', 'color' => '#ffc107'],
             ['name' => 'Cancelled', 'type' => 'penalty', 'color' => '#6c757d'],
 
-            // Insurance statuses
+            // Insurance statuses (policies + fleet car coverage)
             ['name' => 'Active', 'type' => 'insurance', 'color' => '#28a745'],
+            ['name' => 'Inactive', 'type' => 'insurance', 'color' => '#95a5a6'],
             ['name' => 'Expired', 'type' => 'insurance', 'color' => '#dc3545'],
             ['name' => 'Pending Renewal', 'type' => 'insurance', 'color' => '#ffc107'],
             ['name' => 'Cancelled', 'type' => 'insurance', 'color' => '#6c757d'],

@@ -110,6 +110,19 @@
                     @enderror
                 </div>
 
+                {{-- Notify before expiry --}}
+                <div class="col-md-6 mb-3">
+                    <label for="notify_before_expiry_days" class="form-label fw-bold">Notify Before Expiry (days)</label>
+                    <input type="number" name="notify_before_expiry_days" id="notify_before_expiry_days"
+                           class="form-control @error('notify_before_expiry_days') is-invalid @enderror"
+                           value="{{ old('notify_before_expiry_days', isset($model) ? $model->notify_before_expiry_days : null) ?? 30 }}"
+                           min="1" max="730" placeholder="e.g. 30">
+                    <small class="form-text text-muted">Dashboard expiry reminders use this lead time for this provider policy.</small>
+                    @error('notify_before_expiry_days')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+
                 {{-- Status --}}
                 <div class="col-md-6 mb-3">
                     <label for="status_id" class="form-label fw-bold">Status <span class="text-danger">*</span></label>

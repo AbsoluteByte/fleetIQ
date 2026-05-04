@@ -45,7 +45,6 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::put('update-profile', [App\Http\Controllers\Backend\ProfileController::class, 'update'])->name('update-profile');
     Route::put('change-password', [App\Http\Controllers\Backend\ProfileController::class, 'change_password'])->name('change-password');
 
-
     Route::resource('customers', App\Http\Controllers\Backend\CustomerController::class);
     Route::post('customers/{id}/suspend', [App\Http\Controllers\Backend\CustomerController::class, 'suspend'])->name('customers.suspend');
     Route::post('customers/{id}/activate', [App\Http\Controllers\Backend\CustomerController::class, 'activate'])->name('customers.activate');
@@ -132,6 +131,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     Route::post('agreements/{agreement}/regenerate-collections', function (\App\Models\Agreement $agreement) {
         $agreement->generateCollections();
+
         return response()->json(['success' => true]);
     })->name('agreements.regenerate-collections');
 

@@ -1,5 +1,7 @@
 <?php
+
 // app/Models/Car.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +12,7 @@ class Car extends Model
     use HasFactory;
 
     protected $fillable = [
-        'tenant_id','company_id', 'car_model_id', 'registration', 'color',
+        'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
         'purchase_date', 'purchase_price', 'purchase_type', 'seller_name',
         'seller_notes', 'damaged_notes', 'phv_status', 'phv_applied_date', 'phv_applied_by',
@@ -99,6 +101,24 @@ class Car extends Model
         return $this->hasMany(CarInsurance::class);
     }
 
+    public function insuranceCoveragePeriods()
+    {
+        return $this->hasMany(CarInsuranceCoveragePeriod::class)->orderByDesc('id');
+    }
+
+    public function insuranceDocuments()
+    {
+        return $this->hasMany(CarInsuranceDocument::class)->orderByDesc('created_at');
+    }
+
+    /**
+     * Inactive chosen without coverage end date: must supply end date before coverage can activate again.
+     */
+    public function insuranceCoverageNeedsEndDate(): bool
+    {
+        return $this->insuranceCoveragePeriods()->where('end_date_pending', true)->exists();
+    }
+
     public function services()
     {
         return $this->hasMany(CarService::class);
@@ -121,6 +141,7 @@ class Car extends Model
     public function scopeForCurrentTenant($query)
     {
         $tenant = auth()->user()->currentTenant();
+
         return $query->where('tenant_id', $tenant->id ?? 0);
     }
 
@@ -137,23 +158,15 @@ class Car extends Model
     }
 
     /**
-     * Insurance is shown as Active when the latest-by-expiry policy has status "Active" and is not past its expiry date.
+     * True when the vehicle's current insurance row is coverage "Active" (provider policy dates live on the provider).
      */
     public function isInsuranceCurrentlyActive(): bool
     {
         $insurance = $this->insurances
-            ->sortByDesc(fn (CarInsurance $i) => [optional($i->expiry_date)->timestamp ?? 0, $i->id])
+            ->sortByDesc(fn (CarInsurance $i) => $i->id)
             ->first();
 
-        if (! $insurance?->status || ! $insurance->expiry_date) {
-            return false;
-        }
-
-        if (strcasecmp($insurance->status->name, 'Active') !== 0) {
-            return false;
-        }
-
-        return $insurance->expiry_date->copy()->startOfDay()->gte(now()->startOfDay());
+        return (bool) ($insurance?->status && strcasecmp($insurance->status->name, 'Active') === 0);
     }
 
     public function latestService()

@@ -3,21 +3,20 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agreement;
+use App\Models\AgreementCollection;
 use App\Models\Car;
-use App\Models\CarInsurance;
 use App\Models\CarMot;
 use App\Models\CarPhv;
 use App\Models\CarRoadTax;
 use App\Models\CarService;
-use App\Models\Driver;
-use App\Models\Agreement;
-use App\Models\AgreementCollection;
-use App\Models\InsurancePolicy;
 use App\Models\Claim;
+use App\Models\Driver;
 use App\Models\Expense;
+use App\Models\InsuranceProvider;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -33,13 +32,13 @@ class DashboardController extends Controller
     {
         // ✅ Check if superuser
         if (auth()->user()->isSuperUser()) {
-            return view($this->dir . 'superUserDashboard');
+            return view($this->dir.'superUserDashboard');
         }
 
         // ✅ Get current tenant
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
@@ -86,14 +85,14 @@ class DashboardController extends Controller
         $allNotifications = $notificationData['notifications'];
 
         // ✅ SEPARATE PAYMENT NOTIFICATIONS
-        $paymentNotifications = $allNotifications->filter(function($notification) {
+        $paymentNotifications = $allNotifications->filter(function ($notification) {
             return in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
         })->take(10);
 
         // ✅ SEPARATE FLEET NOTIFICATIONS (prioritized by expiry)
-        $fleetNotifications = $allNotifications->filter(function($notification) {
-            return !in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
-        })->sortBy(function($notification) {
+        $fleetNotifications = $allNotifications->filter(function ($notification) {
+            return ! in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+        })->sortBy(function ($notification) {
             // Sort: Expired first (priority 1), then by created_at
             return [$notification['priority'], $notification['created_at']];
         })->take(10);
@@ -147,7 +146,7 @@ class DashboardController extends Controller
                 return [
                     'status' => $item->status->name,
                     'count' => $item->count,
-                    'color' => $item->status->color
+                    'color' => $item->status->color,
                 ];
             });
 
@@ -158,7 +157,7 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
-        return view($this->dir . 'index', compact(
+        return view($this->dir.'index', compact(
             'totalCars', 'totalDrivers', 'activeAgreements', 'totalClaims',
             'carsGrowth', 'driversGrowth', 'revenueGrowth', 'outstandingGrowth',
             'paymentNotifications', 'fleetNotifications',
@@ -174,7 +173,7 @@ class DashboardController extends Controller
         $fleetNotificationExcludedStatuses = ['written_off', 'stolen', 'sold'];
         $nonRoadTaxNotificationExcludedStatuses = array_merge($fleetNotificationExcludedStatuses, ['for_sale']);
 
-        if (!$tenant) {
+        if (! $tenant) {
             return [
                 'notifications' => collect(),
                 'summary' => [
@@ -187,8 +186,8 @@ class DashboardController extends Controller
                     'expiring_road_tax' => 0,
                     'expiring_driver_licenses' => 0,
                     'expiring_phd_licenses' => 0,
-                    'total_count' => 0
-                ]
+                    'total_count' => 0,
+                ],
             ];
         }
 
@@ -213,15 +212,15 @@ class DashboardController extends Controller
 
         foreach ($overdueCollections as $collection) {
             $notifications->push([
-                'id' => 'overdue_' . $collection->id,
+                'id' => 'overdue_'.$collection->id,
                 'type' => 'overdue_payment',
                 'priority' => 1,
                 'title' => 'Overdue Payment',
-                'message' => $collection->agreement->driver->full_name . ' - Overdue by ' . $collection->days_overdue . ' days',
-                'simple_message' => $collection->agreement->driver->full_name . ' - Overdue by ' . $collection->days_overdue . ' days',
-                'amount' => '£' . number_format($collection->remaining_amount, 2),
+                'message' => $collection->agreement->driver->full_name.' - Overdue by '.$collection->days_overdue.' days',
+                'simple_message' => $collection->agreement->driver->full_name.' - Overdue by '.$collection->days_overdue.' days',
+                'amount' => '£'.number_format($collection->remaining_amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
-                'time_ago' => 'Due ' . $collection->due_date->diffForHumans(),
+                'time_ago' => 'Due '.$collection->due_date->diffForHumans(),
                 'action_url' => route('agreements.show', $collection->agreement),
                 'icon' => 'icon-alert-triangle',
                 'color' => 'danger',
@@ -243,13 +242,13 @@ class DashboardController extends Controller
 
         foreach ($dueTodayCollections as $collection) {
             $notifications->push([
-                'id' => 'due_today_' . $collection->id,
+                'id' => 'due_today_'.$collection->id,
                 'type' => 'due_today',
                 'priority' => 2,
                 'title' => 'Payment Due Today',
-                'message' => $collection->agreement->driver->full_name . ' - Payment due today',
-                'simple_message' => $collection->agreement->driver->full_name . ' - Due today',
-                'amount' => '£' . number_format($collection->amount, 2),
+                'message' => $collection->agreement->driver->full_name.' - Payment due today',
+                'simple_message' => $collection->agreement->driver->full_name.' - Due today',
+                'amount' => '£'.number_format($collection->amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
                 'time_ago' => 'Due Today',
                 'action_url' => route('agreements.show', $collection->agreement),
@@ -272,15 +271,15 @@ class DashboardController extends Controller
             ->get();
 
         foreach ($dueThisWeekCollections as $collection) {
-            $daysUntilDue = (int)now()->diffInDays($collection->due_date);
+            $daysUntilDue = (int) now()->diffInDays($collection->due_date);
             $notifications->push([
-                'id' => 'due_week_' . $collection->id,
+                'id' => 'due_week_'.$collection->id,
                 'type' => 'due_this_week',
                 'priority' => 3,
                 'title' => 'Payment Due Soon',
-                'message' => $collection->agreement->driver->full_name . ' - Due in ' . $daysUntilDue . ' days',
-                'simple_message' => $collection->agreement->driver->full_name . ' - Due in ' . $daysUntilDue . ' days',
-                'amount' => '£' . number_format($collection->amount, 2),
+                'message' => $collection->agreement->driver->full_name.' - Due in '.$daysUntilDue.' days',
+                'simple_message' => $collection->agreement->driver->full_name.' - Due in '.$daysUntilDue.' days',
+                'amount' => '£'.number_format($collection->amount, 2),
                 'vehicle' => $collection->agreement->car->registration,
                 'time_ago' => $collection->due_date->diffForHumans(),
                 'action_url' => route('agreements.show', $collection->agreement),
@@ -293,54 +292,54 @@ class DashboardController extends Controller
             ]);
         }
 
-        // ==================== 4. INSURANCE POLICIES (latest policy per car only) ====================
-        $insuranceRows = CarInsurance::with(['car'])
-            ->whereHas('car', function ($query) use ($tenant, $nonRoadTaxNotificationExcludedStatuses) {
-                $query->where('tenant_id', $tenant->id)
-                    ->whereNotIn('fleet_status', $nonRoadTaxNotificationExcludedStatuses);
-            })
+        // ==================== 4. INSURANCE PROVIDERS (policy expiry — uses provider notify-before days) ====================
+        $tenantProviders = InsuranceProvider::with(['company', 'status'])
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('expiry_date')
             ->get();
-        $expiringInsurance = $this->latestInsurancePerCar($insuranceRows)
-            ->filter(function ($policy) {
-                $days = (int) ($policy->notify_before_expiry ?? 0);
-                return $policy->expiry_date <= now()->addDays($days);
-            })
-            ->sortBy('expiry_date')
-            ->values();
 
-        foreach ($expiringInsurance as $policy) {
-            $daysDiff = (int)now()->diffInDays($policy->expiry_date, false);
+        $expiringInsurance = collect();
+
+        foreach ($tenantProviders as $provider) {
+            $leadDays = max(1, (int) ($provider->notify_before_expiry_days ?? 30));
+            if ($provider->expiry_date->gt(now()->copy()->startOfDay()->addDays($leadDays))) {
+                continue;
+            }
+
+            $expiringInsurance->push($provider);
+
+            $daysDiff = (int) now()->diffInDays($provider->expiry_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'primary';
                 $priority = 4;
-            } elseif ($daysDiff == 0) {
+            } elseif ($daysDiff === 0) {
                 $msg = 'Expires today';
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'insurance_' . $policy->id,
+                'id' => 'insurance_provider_'.$provider->id,
                 'type' => 'insurance_expiry',
                 'priority' => $priority,
-                'title' => $daysDiff >= 0 ? 'Insurance Expiring' : 'Insurance Expired',
-                'message' => $policy->car->registration . ' - ' . $msg,
-                'simple_message' => $policy->car->registration . ' - ' . $msg,
-                'vehicle' => $policy->car->registration,
-                'time_ago' => $policy->expiry_date->diffForHumans(),
-                'action_url' => route('cars.show', $policy->car_id),
+                'title' => $daysDiff >= 0 ? 'Insurance provider expiring' : 'Insurance provider expired',
+                'message' => $provider->provider_name.' — '.$msg,
+                'simple_message' => $provider->provider_name.' — '.$msg,
+                'vehicle' => $provider->company?->name ?? '',
+                'time_ago' => $provider->expiry_date->diffForHumans(),
+                'action_url' => route('insurance-providers.edit', $provider),
                 'icon' => 'icon-shield',
                 'color' => $color,
-                'bg_color' => $color == 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
-                'border_color' => $color == 'danger' ? '#ef4444' : '#6366f1',
-                'created_at' => $policy->expiry_date,
-                'sort_key' => $policy->expiry_date->timestamp,
+                'bg_color' => $color === 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                'border_color' => $color === 'danger' ? '#ef4444' : '#6366f1',
+                'created_at' => $provider->expiry_date,
+                'sort_key' => $provider->expiry_date->timestamp,
             ]);
         }
 
@@ -354,16 +353,17 @@ class DashboardController extends Controller
         $expiringPhvs = $this->latestPhvPerCar($phvRows)
             ->filter(function ($phv) {
                 $days = (int) ($phv->notify_before_expiry ?? 0);
+
                 return $phv->expiry_date <= now()->addDays($days);
             })
             ->sortBy('expiry_date')
             ->values();
 
         foreach ($expiringPhvs as $phv) {
-            $daysDiff = (int)now()->diffInDays($phv->expiry_date, false);
+            $daysDiff = (int) now()->diffInDays($phv->expiry_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'secondary';
                 $priority = 5;
             } elseif ($daysDiff == 0) {
@@ -371,18 +371,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'phv_' . $phv->id,
+                'id' => 'phv_'.$phv->id,
                 'type' => 'phv_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'PHV License Expiring' : 'PHV License Expired',
-                'message' => $phv->car->registration . ' - ' . $msg,
-                'simple_message' => $phv->car->registration . ' - ' . $msg,
+                'message' => $phv->car->registration.' - '.$msg,
+                'simple_message' => $phv->car->registration.' - '.$msg,
                 'vehicle' => $phv->car->registration,
                 'time_ago' => $phv->expiry_date->diffForHumans(),
                 'action_url' => route('cars.edit', $phv->car_id),
@@ -410,10 +410,10 @@ class DashboardController extends Controller
             ->values();
 
         foreach ($expiringMots as $mot) {
-            $daysDiff = (int)now()->diffInDays($mot->expiry_date, false);
+            $daysDiff = (int) now()->diffInDays($mot->expiry_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'warning';
                 $priority = 6;
             } elseif ($daysDiff == 0) {
@@ -421,18 +421,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'mot_' . $mot->id,
+                'id' => 'mot_'.$mot->id,
                 'type' => 'mot_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'MOT Expiring' : 'MOT Expired',
-                'message' => $mot->car->registration . ' - ' . $msg,
-                'simple_message' => $mot->car->registration . ' - ' . $msg,
+                'message' => $mot->car->registration.' - '.$msg,
+                'simple_message' => $mot->car->registration.' - '.$msg,
                 'vehicle' => $mot->car->registration,
                 'time_ago' => $mot->expiry_date->diffForHumans(),
                 'action_url' => route('cars.edit', $mot->car_id),
@@ -457,16 +457,17 @@ class DashboardController extends Controller
         $expiringRoadTaxes = $this->latestRoadTaxPerCar($allRoadTaxes)
             ->filter(function ($roadTax) {
                 $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
+
                 return $expiryDate && $expiryDate <= now()->addDays(30);
             })
             ->values();
 
         foreach ($expiringRoadTaxes as $roadTax) {
             $expiryDate = $this->calculateRoadTaxExpiry($roadTax);
-            $daysDiff = (int)now()->diffInDays($expiryDate, false);
+            $daysDiff = (int) now()->diffInDays($expiryDate, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'success';
                 $priority = 7;
             } elseif ($daysDiff == 0) {
@@ -474,18 +475,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'road_tax_' . $roadTax->id,
+                'id' => 'road_tax_'.$roadTax->id,
                 'type' => 'road_tax_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'Road Tax Expiring' : 'Road Tax Expired',
-                'message' => $roadTax->car->registration . ' - ' . $msg,
-                'simple_message' => $roadTax->car->registration . ' - ' . $msg,
+                'message' => $roadTax->car->registration.' - '.$msg,
+                'simple_message' => $roadTax->car->registration.' - '.$msg,
                 'vehicle' => $roadTax->car->registration,
                 'time_ago' => $expiryDate->diffForHumans(),
                 'action_url' => route('cars.edit', $roadTax->car_id),
@@ -508,6 +509,7 @@ class DashboardController extends Controller
         $serviceNotifications = $this->latestServicePerCar($serviceRows)
             ->map(function ($service) {
                 $service->due_date = $service->service_date->copy()->addMonths(3);
+
                 return $service;
             })
             ->filter(function ($service) {
@@ -520,7 +522,7 @@ class DashboardController extends Controller
             $daysDiff = (int) now()->diffInDays($service->due_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Service due in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Service due in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'info';
                 $priority = 7;
             } elseif ($daysDiff == 0) {
@@ -528,18 +530,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Service overdue by ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '');
+                $msg = 'Service overdue by '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '');
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'car_service_' . $service->id,
+                'id' => 'car_service_'.$service->id,
                 'type' => 'car_service_due',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'Car Service Due' : 'Car Service Overdue',
-                'message' => $service->car->registration . ' - ' . $msg,
-                'simple_message' => $service->car->registration . ' - ' . $msg,
+                'message' => $service->car->registration.' - '.$msg,
+                'simple_message' => $service->car->registration.' - '.$msg,
                 'vehicle' => $service->car->registration,
                 'time_ago' => $service->due_date->diffForHumans(),
                 'action_url' => route('cars.edit', $service->car_id),
@@ -570,16 +572,16 @@ class DashboardController extends Controller
             $availableDate = $agreement->termination_available_from_date ?: $agreement->termination_notice_date;
             $daysDiff = (int) now()->diffInDays($availableDate, false);
             $msg = $daysDiff >= 0
-                ? 'Available in ' . $daysDiff . ' day' . ($daysDiff === 1 ? '' : 's')
-                : 'Available since ' . abs($daysDiff) . ' day' . (abs($daysDiff) === 1 ? '' : 's') . ' ago';
+                ? 'Available in '.$daysDiff.' day'.($daysDiff === 1 ? '' : 's')
+                : 'Available since '.abs($daysDiff).' day'.(abs($daysDiff) === 1 ? '' : 's').' ago';
 
             $notifications->push([
-                'id' => 'agreement_termination_' . $agreement->id,
+                'id' => 'agreement_termination_'.$agreement->id,
                 'type' => 'agreement_termination',
                 'priority' => $daysDiff < 0 ? 1 : 6,
                 'title' => 'Rent Agreement Termination',
-                'message' => ($agreement->car->registration ?? 'Vehicle') . ' - ' . $msg,
-                'simple_message' => ($agreement->car->registration ?? 'Vehicle') . ' - ' . $msg,
+                'message' => ($agreement->car->registration ?? 'Vehicle').' - '.$msg,
+                'simple_message' => ($agreement->car->registration ?? 'Vehicle').' - '.$msg,
                 'vehicle' => $agreement->car->registration ?? 'N/A',
                 'time_ago' => $availableDate->diffForHumans(),
                 'action_url' => route('agreements.show', $agreement),
@@ -599,10 +601,10 @@ class DashboardController extends Controller
             ->get();
 
         foreach ($expiringDriverLicenses as $driver) {
-            $daysDiff = (int)now()->diffInDays($driver->driver_license_expiry_date, false);
+            $daysDiff = (int) now()->diffInDays($driver->driver_license_expiry_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'info';
                 $priority = 8;
             } elseif ($daysDiff == 0) {
@@ -610,18 +612,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'driver_license_' . $driver->id,
+                'id' => 'driver_license_'.$driver->id,
                 'type' => 'driver_license_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'Driver License Expiring' : 'Driver License Expired',
-                'message' => $driver->full_name . ' - ' . $msg,
-                'simple_message' => $driver->full_name . ' - ' . $msg,
+                'message' => $driver->full_name.' - '.$msg,
+                'simple_message' => $driver->full_name.' - '.$msg,
                 'driver' => $driver->full_name,
                 'time_ago' => $driver->driver_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
@@ -642,10 +644,10 @@ class DashboardController extends Controller
             ->get();
 
         foreach ($expiringPhdLicenses as $driver) {
-            $daysDiff = (int)now()->diffInDays($driver->phd_license_expiry_date, false);
+            $daysDiff = (int) now()->diffInDays($driver->phd_license_expiry_date, false);
 
             if ($daysDiff > 0) {
-                $msg = 'Expires in ' . $daysDiff . ' day' . ($daysDiff > 1 ? 's' : '');
+                $msg = 'Expires in '.$daysDiff.' day'.($daysDiff > 1 ? 's' : '');
                 $color = 'secondary';
                 $priority = 9;
             } elseif ($daysDiff == 0) {
@@ -653,18 +655,18 @@ class DashboardController extends Controller
                 $color = 'warning';
                 $priority = 2;
             } else {
-                $msg = 'Expired ' . abs($daysDiff) . ' day' . (abs($daysDiff) > 1 ? 's' : '') . ' ago';
+                $msg = 'Expired '.abs($daysDiff).' day'.(abs($daysDiff) > 1 ? 's' : '').' ago';
                 $color = 'danger';
                 $priority = 1;
             }
 
             $notifications->push([
-                'id' => 'phd_license_' . $driver->id,
+                'id' => 'phd_license_'.$driver->id,
                 'type' => 'phd_license_expiry',
                 'priority' => $priority,
                 'title' => $daysDiff >= 0 ? 'PHD License Expiring' : 'PHD License Expired',
-                'message' => $driver->full_name . ' - ' . $msg,
-                'simple_message' => $driver->full_name . ' - ' . $msg,
+                'message' => $driver->full_name.' - '.$msg,
+                'simple_message' => $driver->full_name.' - '.$msg,
                 'driver' => $driver->full_name,
                 'time_ago' => $driver->phd_license_expiry_date->diffForHumans(),
                 'action_url' => route('drivers.edit', $driver->id),
@@ -696,12 +698,12 @@ class DashboardController extends Controller
             'agreement_terminations' => $terminationNotices->count(),
             'expiring_driver_licenses' => $expiringDriverLicenses->count(),
             'expiring_phd_licenses' => $expiringPhdLicenses->count(),
-            'total_count' => $sortedNotifications->count()
+            'total_count' => $sortedNotifications->count(),
         ];
 
         return [
             'notifications' => $sortedNotifications,
-            'summary' => $summary
+            'summary' => $summary,
         ];
     }
 
@@ -712,7 +714,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'notifications' => $data['notifications']->take(15)->values(),
-            'summary' => $data['summary']
+            'summary' => $data['summary'],
         ]);
     }
 
@@ -724,8 +726,8 @@ class DashboardController extends Controller
             $data = $this->getUnifiedNotifications();
 
             // ✅ Filter OUT payment notifications - ONLY FLEET NOTIFICATIONS
-            $fleetNotifications = $data['notifications']->filter(function($notification) {
-                return !in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
+            $fleetNotifications = $data['notifications']->filter(function ($notification) {
+                return ! in_array($notification['type'], ['overdue_payment', 'due_today', 'due_this_week']);
             });
 
             // ✅ Filter by type if requested
@@ -746,8 +748,9 @@ class DashboardController extends Controller
         $data = $this->getUnifiedNotifications();
         $summary = $data['summary'];
 
-        return view($this->dir . 'notifications', compact('summary'));
+        return view($this->dir.'notifications', compact('summary'));
     }
+
     public function paymentsIndex(Request $request)
     {
         // If DataTables AJAX request
@@ -784,7 +787,7 @@ class DashboardController extends Controller
                     'time_ago' => $notification['time_ago'],
                     'action_url' => $notification['action_url'] ?? '#',
                     'collection_id' => $collectionId,
-                    'color' => $notification['color']
+                    'color' => $notification['color'],
                 ];
             });
 
@@ -795,7 +798,7 @@ class DashboardController extends Controller
         $data = $this->getUnifiedNotifications();
         $summary = $data['summary'];
 
-        return view($this->dir . 'payments', compact('summary'));
+        return view($this->dir.'payments', compact('summary'));
     }
 
     /**
@@ -828,15 +831,6 @@ class DashboardController extends Controller
         })->values();
     }
 
-    private function latestInsurancePerCar(Collection $policies): Collection
-    {
-        return $policies->groupBy('car_id')->map(function ($group) {
-            return $group->sortByDesc(function ($p) {
-                return [optional($p->expiry_date)->timestamp ?? 0, $p->id];
-            })->first();
-        })->values();
-    }
-
     private function latestServicePerCar(Collection $services): Collection
     {
         return $services->groupBy('car_id')->map(function ($group) {
@@ -849,7 +843,7 @@ class DashboardController extends Controller
     // ✅ Helper method: Calculate road tax expiry
     private function calculateRoadTaxExpiry($roadTax)
     {
-        if (!$roadTax->start_date || !$roadTax->term) {
+        if (! $roadTax->start_date || ! $roadTax->term) {
             return null;
         }
 
@@ -863,7 +857,7 @@ class DashboardController extends Controller
                 return $startDate->copy()->addYear();
             default:
                 if (preg_match('/(\d+)\s*(month|year)/', strtolower($roadTax->term), $matches)) {
-                    $number = (int)$matches[1];
+                    $number = (int) $matches[1];
                     $unit = $matches[2];
 
                     if ($unit === 'month') {
@@ -872,6 +866,7 @@ class DashboardController extends Controller
                         return $startDate->copy()->addYears($number);
                     }
                 }
+
                 return null;
         }
     }

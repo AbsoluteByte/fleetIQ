@@ -1149,12 +1149,37 @@
 
 @php
     $latestInsuranceForForm = null;
-    $olderInsurancesForModal = collect();
-    $showInsuranceViewAll = false;
-    if (isset($model) && $model->id && $model->insurances->isNotEmpty()) {
-        $olderInsurancesForModal = $model->insurances->count() > 1 ? $model->insurances->slice(1)->values() : collect();
-        $showInsuranceViewAll = $olderInsurancesForModal->isNotEmpty();
-        $latestInsuranceForForm = $model->insurances->first();
+    $coveragePeriodRows = collect();
+    $documentHistoryRows = collect();
+    $showInsuranceHistoryButton = false;
+    $insuranceEndDatePending = false;
+    $latestInsuranceCoverageWasActive = false;
+    if (isset($model) && $model->id) {
+        if ($model->relationLoaded('insurances') ? $model->insurances->isNotEmpty() : $model->insurances()->exists()) {
+            $latestInsuranceForForm = $model->relationLoaded('insurances')
+                ? $model->insurances->sortByDesc('id')->first()
+                : $model->insurances()->orderByDesc('id')->first();
+        }
+        if ($model->relationLoaded('insuranceCoveragePeriods')) {
+            $coveragePeriodRows = $model->insuranceCoveragePeriods;
+        } else {
+            $coveragePeriodRows = $model->insuranceCoveragePeriods()->with(['insuranceProvider', 'activatedBy', 'deactivatedBy'])->orderByDesc('id')->get();
+        }
+        if ($model->relationLoaded('insuranceDocuments')) {
+            $documentHistoryRows = $model->insuranceDocuments;
+        } else {
+            $documentHistoryRows = $model->insuranceDocuments()->with('insuranceProvider')->orderByDesc('created_at')->get();
+        }
+        $showInsuranceHistoryButton = $coveragePeriodRows->isNotEmpty() || $documentHistoryRows->isNotEmpty();
+        $insuranceEndDatePending = $model->insuranceCoverageNeedsEndDate();
+        $latestInsuranceCoverageWasActive = (bool) ($latestInsuranceForForm
+            && strcasecmp(optional($latestInsuranceForForm->status)->name ?? '', 'Active') === 0);
+    }
+
+    $__effInsStatusId = old('insurance_status_id');
+    if ($__effInsStatusId === null && isset($latestInsuranceForForm, $carInsuranceActiveStatusId, $carInsuranceInactiveStatusId)) {
+        $n = strtolower(optional($latestInsuranceForForm->status)->name ?? '');
+        $__effInsStatusId = $n === 'active' ? $carInsuranceActiveStatusId : $carInsuranceInactiveStatusId;
     }
 @endphp
 
@@ -1162,28 +1187,24 @@
 <div class="row mt-1">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <div class="d-flex flex-wrap justify-content-between align-items-center">
-                    <div class="d-flex flex-wrap align-items-center mb-1 mb-md-0">
-                        <h5 class="card-title mb-0 mr-3">
-                            <i class="fa fa-shield-alt"></i> Insurance Information
-                        </h5>
-                        <div class="form-check mb-0">
-                            <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
-                                {{ (old('has_insurance') ?? (isset($model) && $model->id && $model->insurances->count() > 0)) ? 'checked' : '' }}>
-                            <label class="form-check-label" for="has_insurance">
-                                <strong>Add Insurance</strong>
-                            </label>
-                        </div>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
+                <div class="d-flex flex-wrap align-items-center mb-1 mb-md-0">
+                    <h5 class="card-title mb-0 mr-3">
+                        <i class="fa fa-shield-alt"></i> Insurance Information
+                    </h5>
+                    <div class="form-check mb-0">
+                        <input type="checkbox" class="form-check-input" id="has_insurance" name="has_insurance"
+                            {{ (old('has_insurance') ?? (isset($model) && $model->id && (($model->relationLoaded('insurances') ? $model->insurances->count() : $model->insurances()->count()) > 0))) ? 'checked' : '' }}>
+                        <label class="form-check-label" for="has_insurance">
+                            <strong>Add Insurance</strong>
+                        </label>
                     </div>
                 </div>
-
-                @if(isset($model) && $model->id && $showInsuranceViewAll)
-                    <button type="button" class="btn btn-sm btn-outline-primary mb-1 mb-md-0" data-toggle="modal" data-target="#editInsuranceHistoryModal">
-                        View All
+                @if(isset($model) && $model->id && $showInsuranceHistoryButton)
+                    <button type="button" class="btn btn-sm btn-outline-primary mb-1 mb-md-0" data-toggle="modal" data-target="#carInsuranceHistoryModal">
+                        View History
                     </button>
                 @endif
-
             </div>
             <div class="card-body" id="insurance-section" style="display: none;">
                 <div class="row">
@@ -1195,7 +1216,7 @@
                                 @foreach($insuranceProviders as $provider)
                                     <option value="{{ $provider->id }}"
                                             data-company-id="{{ $provider->company_id }}"
-                                        {{ (old('insurance_provider_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->insurance_provider_id : '')) == $provider->id ? 'selected' : '' }}>
+                                        {{ (string) (old('insurance_provider_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->insurance_provider_id : '')) === (string) $provider->id ? 'selected' : '' }}>
                                         {{ $provider->provider_name }}
                                     </option>
                                 @endforeach
@@ -1203,17 +1224,19 @@
                             @error('insurance_provider_id')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
+                            <small class="form-text text-muted">Required when status is Active.</small>
                         </div>
                     </div>
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_status_id">Status</label>
+                            <label for="insurance_status_id">Coverage status</label>
                             <select name="insurance_status_id" id="insurance_status_id" class="form-control @error('insurance_status_id') is-invalid @enderror">
                                 <option value="">Select Status</option>
-                                @foreach($statuses as $status)
+                                @foreach($carInsuranceStatuses as $status)
                                     <option value="{{ $status->id }}"
-                                        {{ (old('insurance_status_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->status_id : '')) == $status->id ? 'selected' : '' }}>
+                                        {{ strcasecmp($status->name ?? '', 'Active') === 0 && $insuranceEndDatePending ? 'disabled' : '' }}
+                                        {{ (string) ($__effInsStatusId ?? '') === (string) $status->id ? 'selected' : '' }}>
                                         {{ $status->name }}
                                     </option>
                                 @endforeach
@@ -1224,13 +1247,27 @@
                         </div>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="insurance-coverage-start-wrap" style="display:none;">
                         <div class="form-group">
-                            <label for="insurance_start_date">Start Date</label>
-                            <input type="date" name="insurance_start_date" id="insurance_start_date"
-                                   class="form-control @error('insurance_start_date') is-invalid @enderror"
-                                   value="{{ old('insurance_start_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->start_date->format('Y-m-d') : '') }}">
-                            @error('insurance_start_date')
+                            <label for="insurance_coverage_start_date">Coverage start date</label>
+                            <input type="date" name="insurance_coverage_start_date" id="insurance_coverage_start_date"
+                                   class="form-control @error('insurance_coverage_start_date') is-invalid @enderror"
+                                   value="{{ old('insurance_coverage_start_date', now()->format('Y-m-d')) }}"
+                                   disabled>
+                            @error('insurance_coverage_start_date')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="col-md-6" id="insurance-coverage-end-wrap" style="display:none;">
+                        <div class="form-group">
+                            <label for="insurance_coverage_end_date">Coverage end date</label>
+                            <input type="date" name="insurance_coverage_end_date" id="insurance_coverage_end_date"
+                                   class="form-control @error('insurance_coverage_end_date') is-invalid @enderror"
+                                   value="{{ old('insurance_coverage_end_date', now()->format('Y-m-d')) }}"
+                                   disabled>
+                            @error('insurance_coverage_end_date')
                             <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -1238,40 +1275,15 @@
 
                     <div class="col-md-6">
                         <div class="form-group">
-                            <label for="insurance_expiry_date">Expiry Date</label>
-                            <input type="date" name="insurance_expiry_date" id="insurance_expiry_date"
-                                   class="form-control @error('insurance_expiry_date') is-invalid @enderror"
-                                   value="{{ old('insurance_expiry_date') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->expiry_date->format('Y-m-d') : '') }}">
-                            @error('insurance_expiry_date')
-                            <div class="invalid-feedback">{{ $message }}</div>
+                            <label for="insurance_documents">Insurance document(s)</label>
+                            <input type="file" name="insurance_documents[]" id="insurance_documents"
+                                   class="form-control @error('insurance_documents') is-invalid @enderror"
+                                   accept=".pdf,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf" multiple>
+                            @error('insurance_documents')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label for="insurance_notify_before_expiry">Notify Before Expiry (days)</label>
-                            <input type="number" name="insurance_notify_before_expiry" id="insurance_notify_before_expiry"
-                                   class="form-control @error('insurance_notify_before_expiry') is-invalid @enderror"
-                                   value="{{ old('insurance_notify_before_expiry') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->notify_before_expiry : '30') }}"
-                                   min="1">
-                            @error('insurance_notify_before_expiry')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label for="insurance_document">Insurance Document</label>
-                            <input type="file" name="insurance_document" id="insurance_document"
-                                   class="form-control @error('insurance_document') is-invalid @enderror"
-                                   accept=".pdf,.jpg,.jpeg,.png">
-                            @if($latestInsuranceForForm && $latestInsuranceForForm->insurance_document)
-                                <small class="text-muted">Current: <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsuranceForForm->insurance_document) }}" target="_blank">View Document</a></small>
-                            @endif
-                            @error('insurance_document')
-                            <div class="invalid-feedback">{{ $message }}</div>
+                            @error('insurance_documents.*')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
                         </div>
                     </div>
@@ -1281,55 +1293,108 @@
     </div>
 </div>
 
-@if(isset($model) && $model->id && $showInsuranceViewAll)
-<div class="modal fade" id="editInsuranceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="editInsuranceHistoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+@if(isset($model) && $model->id && $showInsuranceHistoryButton)
+<div class="modal fade" id="carInsuranceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="carInsuranceHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editInsuranceHistoryModalLabel">Previous insurance records</h5>
+                <h5 class="modal-title mb-0" id="carInsuranceHistoryModalLabel">Insurance history</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-bordered mb-0">
-                        <thead class="thead-light">
-                            <tr>
-                                <th>Provider</th>
-                                <th>Start</th>
-                                <th>Expiry</th>
-                                <th>Status</th>
-                                <th>Notify (days)</th>
-                                <th>Document</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($olderInsurancesForModal as $insuranceH)
-                            <tr>
-                                <td>{{ $insuranceH->insuranceProvider->provider_name ?? '—' }}</td>
-                                <td>{{ $insuranceH->start_date->format('d M, Y') }}</td>
-                                <td>{{ $insuranceH->expiry_date->format('d M, Y') }}</td>
-                                <td>{{ $insuranceH->status->name ?? '—' }}</td>
-                                <td>{{ $insuranceH->notify_before_expiry }}</td>
-                                <td>
-                                    @if($insuranceH->insurance_document)
-                                        <a href="{{ asset('uploads/cars/insurance_documents/' . $insuranceH->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
-                                    @else
-                                        <span class="text-muted">—</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-2" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="ins-hist-cover-tab" data-toggle="tab" href="#ins-hist-cover" role="tab" aria-controls="ins-hist-cover" aria-selected="true">
+                            Coverage periods
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="ins-hist-docs-tab" data-toggle="tab" href="#ins-hist-docs" role="tab" aria-controls="ins-hist-docs" aria-selected="false">
+                            Documents
+                        </a>
+                    </li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="ins-hist-cover" role="tabpanel" aria-labelledby="ins-hist-cover-tab">
+                        @if($coveragePeriodRows->isEmpty())
+                            <p class="text-muted mb-0">No recorded active coverage intervals yet.</p>
+                        @else
+                            <div class="table-responsive">
+                                <table class="table table-bordered mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Insurance provider</th>
+                                            <th>Active from</th>
+                                            <th>Activated by</th>
+                                            <th>Active until</th>
+                                            <th>Ended by</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($coveragePeriodRows as $period)
+                                        <tr>
+                                            <td>{{ $period->insuranceProvider->provider_name ?? '—' }}</td>
+                                            <td>{{ $period->activated_at?->format('d M Y, H:i') ?? '—' }}</td>
+                                            <td>{{ $period->activatedBy?->name ?? '—' }}</td>
+                                            <td>@if(($period->end_date_pending ?? false) && !$period->deactivated_at)
+                                                    <span class="text-muted">Pending</span>
+                                                @elseif($period->deactivated_at)
+                                                    {{ $period->deactivated_at->format('d M Y, H:i') }}
+                                                @else
+                                                    Current
+                                                @endif
+                                            </td>
+                                            <td>{{ $period->deactivated_at ? ($period->deactivatedBy?->name ?? '—') : '—' }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </div>
+                    <div class="tab-pane fade" id="ins-hist-docs" role="tabpanel" aria-labelledby="ins-hist-docs-tab">
+                        @if($documentHistoryRows->isEmpty())
+                            <p class="text-muted mb-0">No documents uploaded yet.</p>
+                        @else
+                            <div class="table-responsive">
+                                <table class="table table-bordered mb-0">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Uploaded</th>
+                                            <th>Provider (at upload)</th>
+                                            <th>File</th>
+                                            <th style="width:200px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($documentHistoryRows as $histDoc)
+                                            @php
+                                                $histUrl = $histDoc->publicUrl();
+                                                $histLabel = $histDoc->original_name ?: $histDoc->document;
+                                            @endphp
+                                            <tr>
+                                                <td>{{ $histDoc->created_at?->format('d M Y, H:i') ?? '—' }}</td>
+                                                <td>{{ $histDoc->insuranceProvider->provider_name ?? '—' }}</td>
+                                                <td>{{ $histLabel }}</td>
+                                                <td>
+                                                    <a href="{{ $histUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View</a>
+                                                    <a href="{{ $histUrl }}" target="_blank" rel="noopener noreferrer" download="{{ basename($histLabel) }}" class="btn btn-sm btn-outline-secondary">Download</a>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 @endif
-
 @php
     $latestServiceForForm = isset($model) && $model->id ? $model->latestService() : null;
     $activeReservationForForm = isset($model) && $model->id ? $model->activeReservation() : null;
@@ -1844,6 +1909,10 @@
                 'provider_name' => $provider->provider_name
             ];
         }));
+        const INSURANCE_ACTIVE_STATUS_ID = @json($carInsuranceActiveStatusId ?? null);
+        const INSURANCE_INACTIVE_STATUS_ID = @json($carInsuranceInactiveStatusId ?? null);
+        const INSURANCE_END_DATE_PENDING = @json($insuranceEndDatePending ?? false);
+        const INSURANCE_LATEST_COVERAGE_WAS_ACTIVE = @json($latestInsuranceCoverageWasActive ?? false);
 
         function filterInsuranceProviders() {
             const companyId = document.getElementById('company_id').value;
@@ -1870,26 +1939,66 @@
             }
         }
 
-        // ✅ Insurance Section Toggle
+        function refreshInsuranceCoverageDateUi() {
+            const startWrap = document.getElementById('insurance-coverage-start-wrap');
+            const endWrap = document.getElementById('insurance-coverage-end-wrap');
+            const statusEl = document.getElementById('insurance_status_id');
+            const hasIns = document.getElementById('has_insurance');
+            const startInput = document.getElementById('insurance_coverage_start_date');
+            const endInput = document.getElementById('insurance_coverage_end_date');
+
+            if (!startWrap || !endWrap || !statusEl || !hasIns || !startInput || !endInput) {
+                return;
+            }
+
+            const sectionOn = hasIns.checked;
+            const activeSel = INSURANCE_ACTIVE_STATUS_ID !== null && String(statusEl.value) === String(INSURANCE_ACTIVE_STATUS_ID);
+            const inactiveSel = INSURANCE_INACTIVE_STATUS_ID !== null && String(statusEl.value) === String(INSURANCE_INACTIVE_STATUS_ID);
+
+            const showStart = sectionOn && activeSel;
+            const showEnd = sectionOn && inactiveSel && (INSURANCE_LATEST_COVERAGE_WAS_ACTIVE || INSURANCE_END_DATE_PENDING);
+
+            startWrap.style.display = showStart ? 'block' : 'none';
+            endWrap.style.display = showEnd ? 'block' : 'none';
+
+            startInput.toggleAttribute('disabled', !showStart);
+            endInput.toggleAttribute('disabled', !showEnd);
+        }
+
+        function applyCarInsuranceFieldRequirements() {
+            const hasInsuranceCheckbox = document.getElementById('has_insurance');
+            const provider = document.getElementById('insurance_provider_id');
+            const status = document.getElementById('insurance_status_id');
+            if (!hasInsuranceCheckbox || !provider || !status) {
+                return;
+            }
+
+            refreshInsuranceCoverageDateUi();
+
+            if (INSURANCE_ACTIVE_STATUS_ID === null) {
+                return;
+            }
+
+            const sectionOn = hasInsuranceCheckbox.checked;
+            status.toggleAttribute('required', sectionOn);
+            provider.removeAttribute('required');
+            if (!sectionOn) {
+                return;
+            }
+
+            if (String(status.value) === String(INSURANCE_ACTIVE_STATUS_ID)) {
+                provider.setAttribute('required', 'required');
+            }
+        }
+
         function toggleInsuranceSection() {
             const hasInsuranceCheckbox = document.getElementById('has_insurance');
             const insuranceSection = document.getElementById('insurance-section');
 
-            if (hasInsuranceCheckbox.checked) {
-                insuranceSection.style.display = 'block';
-                document.getElementById('insurance_provider_id').setAttribute('required', 'required');
-                document.getElementById('insurance_start_date').setAttribute('required', 'required');
-                document.getElementById('insurance_expiry_date').setAttribute('required', 'required');
-                document.getElementById('insurance_notify_before_expiry').setAttribute('required', 'required');
-                document.getElementById('insurance_status_id').setAttribute('required', 'required');
-            } else {
-                insuranceSection.style.display = 'none';
-                document.getElementById('insurance_provider_id').removeAttribute('required');
-                document.getElementById('insurance_start_date').removeAttribute('required');
-                document.getElementById('insurance_expiry_date').removeAttribute('required');
-                document.getElementById('insurance_notify_before_expiry').removeAttribute('required');
-                document.getElementById('insurance_status_id').removeAttribute('required');
-            }
+            if (!hasInsuranceCheckbox || !insuranceSection) return;
+
+            insuranceSection.style.display = hasInsuranceCheckbox.checked ? 'block' : 'none';
+            applyCarInsuranceFieldRequirements();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -1911,6 +2020,10 @@
 
             document.getElementById('company_id').addEventListener('change', filterInsuranceProviders);
             document.getElementById('has_insurance').addEventListener('change', toggleInsuranceSection);
+            const insuranceStatusSelect = document.getElementById('insurance_status_id');
+            if (insuranceStatusSelect) {
+                insuranceStatusSelect.addEventListener('change', applyCarInsuranceFieldRequirements);
+            }
             document.getElementById('log_book_applied').addEventListener('change', toggleLogBookSection);
             document.getElementById('reserve_car').addEventListener('change', toggleReservationSection);
             document.getElementById('fleet_status').addEventListener('change', toggleDamagedStatusSections);

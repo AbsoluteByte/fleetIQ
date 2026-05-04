@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,12 +12,14 @@ class InsuranceProvider extends Model
     protected $fillable = [
         'company_id', 'provider_name', 'insurance_type',
         'amount',
-        'policy_number', 'expiry_date', 'status_id', 'tenant_id', 'createdBy', 'updatedBy'
+        'policy_number', 'expiry_date', 'notify_before_expiry_days',
+        'status_id', 'tenant_id', 'createdBy', 'updatedBy',
     ];
 
     protected $casts = [
         'expiry_date' => 'date',
-        'amount' => 'decimal:2'
+        'amount' => 'decimal:2',
+        'notify_before_expiry_days' => 'integer',
     ];
 
     public function status()

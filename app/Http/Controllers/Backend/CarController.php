@@ -1,29 +1,34 @@
 <?php
+
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Car;
+use App\Models\CarInsuranceCoveragePeriod;
+use App\Models\CarInsuranceDocument;
 use App\Models\CarModel;
 use App\Models\CarMot;
 use App\Models\CarPhv;
-use App\Models\CarReservation;
 use App\Models\CarRoadTax;
-use App\Models\CarService;
 use App\Models\Company;
 use App\Models\Counsel;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class CarController extends Controller
 {
     protected $url = 'cars.';
+
     protected $dir = 'backend.cars.';
+
     protected $name = 'Cars';
 
     public function __construct()
@@ -40,7 +45,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
@@ -58,7 +63,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'index', compact('cars'));
+        return view($this->dir.'index', compact('cars'));
     }
 
     // ✅ Updated Create
@@ -66,21 +71,25 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
 
-        $model = new Car();
+        $model = new Car;
 
         // ✅ Filter by tenant
         $companies = Company::where('tenant_id', $tenant->id)->get();
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
-        $statuses = Status::where('type', 'insurance')->get();
+        $carInsuranceStatuses = Status::where('type', 'insurance')->whereIn('name', ['Active', 'Inactive'])->get()
+            ->sortBy(fn (Status $s) => $s->name === 'Active' ? 0 : 1)
+            ->values();
+        $carInsuranceActiveStatusId = Status::where('type', 'insurance')->where('name', 'Active')->value('id');
+        $carInsuranceInactiveStatusId = Status::where('type', 'insurance')->where('name', 'Inactive')->value('id');
 
-        return view($this->dir . 'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'carInsuranceStatuses', 'carInsuranceActiveStatusId', 'carInsuranceInactiveStatusId'));
     }
 
     // ✅ Updated Store
@@ -88,10 +97,14 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
+
+        $activeCoverageStatusId = Status::where('type', 'insurance')->where('name', 'Active')->value('id');
+
+        $this->normalizeInsuranceDocumentsUploads($request);
 
         // Build validation rules dynamically
         $rules = [
@@ -101,8 +114,8 @@ class CarController extends Controller
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'manufacture_year' => 'required|integer|min:1900|max:' . date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:' . date('Y'),
+            'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -149,12 +162,19 @@ class CarController extends Controller
 
         if ($request->has('has_insurance')) {
             $rules = array_merge($rules, [
-                'insurance_provider_id' => 'required|exists:insurance_providers,id',
-                'insurance_start_date' => 'required|date',
-                'insurance_expiry_date' => 'required|date',
-                'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-                'insurance_notify_before_expiry' => 'required|integer|min:1',
-                'insurance_status_id' => 'required|exists:statuses,id',
+                'insurance_provider_id' => [
+                    'nullable',
+                    Rule::exists('insurance_providers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === (int) $activeCoverageStatusId),
+                ],
+                'insurance_documents' => 'nullable|array',
+                'insurance_documents.*' => $this->insuranceDocumentItemValidationRules(),
+                'insurance_coverage_start_date' => 'nullable|date',
+                'insurance_coverage_end_date' => 'nullable|date',
+                'insurance_status_id' => [
+                    'required',
+                    Rule::exists('statuses', 'id')->where(fn ($q) => $q->where('type', 'insurance')->whereIn('name', ['Active', 'Inactive'])),
+                ],
             ]);
         }
 
@@ -224,37 +244,57 @@ class CarController extends Controller
                 $this->storeServiceIfPresent($request, $car, $tenant);
                 $this->syncReservation($request, $car, $tenant);
 
-                // Store Insurance
+                // Store Insurance (provider + Active/Inactive + document — policy dates/notifications live on Insurance Provider)
                 if ($request->has('has_insurance')) {
+                    $coverageStatus = Status::findOrFail($validated['insurance_status_id']);
+                    $uploadedDocs = $this->storeInsuranceDocumentFiles($request);
+                    $latestStoredName = $uploadedDocs !== [] ? end($uploadedDocs)['stored'] : null;
+
                     $insuranceData = [
                         'tenant_id' => $tenant->id,
-                        'insurance_provider_id' => $validated['insurance_provider_id'],
-                        'start_date' => $validated['insurance_start_date'],
-                        'expiry_date' => $validated['insurance_expiry_date'],
-                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'insurance_provider_id' => $validated['insurance_provider_id'] ?? null,
+                        'start_date' => null,
+                        'expiry_date' => null,
+                        'notify_before_expiry' => null,
                         'status_id' => $validated['insurance_status_id'],
+                        'insurance_document' => $latestStoredName,
                     ];
 
-                    if ($request->hasFile('insurance_document')) {
-                        $insuranceData['insurance_document'] = $this->uploadFile(
-                            $request->file('insurance_document'),
-                            'uploads/cars/insurance_documents'
-                        );
-                    }
-
                     $car->insurances()->create($insuranceData);
+                    $this->syncInsuranceCoveragePeriods(
+                        $car,
+                        null,
+                        null,
+                        $coverageStatus->name,
+                        $insuranceData['insurance_provider_id'],
+                        Auth::id(),
+                        $validated['insurance_coverage_start_date'] ?? null,
+                        $validated['insurance_coverage_end_date'] ?? null
+                    );
+
+                    $this->appendCarInsuranceDocumentsFromUploads(
+                        $car->fresh(),
+                        $uploadedDocs,
+                        $insuranceData['insurance_provider_id']
+                    );
+
+                    $this->removeCarInsuranceSnapshotIfInactiveWithRecordedEnd(
+                        $coverageStatus,
+                        $validated['insurance_coverage_end_date'] ?? null,
+                        $car
+                    );
                 }
 
                 return $car;
             });
 
-            return redirect()->route($this->url . 'index')
+            return redirect()->route($this->url.'index')
                 ->with('success', 'Car added successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error creating car: ' . $e->getMessage());
+                ->with('error', 'Error creating car: '.$e->getMessage());
         }
     }
 
@@ -268,9 +308,10 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car');
         }
 
-        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'logBookAppliedBy', 'services.createdBy', 'reservations.createdBy', 'agreements']);
+        $car->load(['company', 'carModel', 'mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'insuranceCoveragePeriods.insuranceProvider', 'insuranceCoveragePeriods.activatedBy', 'insuranceCoveragePeriods.deactivatedBy', 'insuranceDocuments.insuranceProvider', 'logBookAppliedBy', 'services.createdBy', 'reservations.createdBy', 'agreements']);
         $this->sortCarHistoryRelations($car);
-        return view($this->dir . 'show', compact('car'));
+
+        return view($this->dir.'show', compact('car'));
     }
 
     // ✅ Updated Edit
@@ -278,13 +319,13 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found!');
         }
 
         $model = Car::where('tenant_id', $tenant->id)
-            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'sornAppliedBy', 'services', 'reservations'])
+            ->with(['mots', 'roadTaxes', 'phvs.counsel', 'phvs.phvAppliedBy', 'insurances.insuranceProvider', 'insurances.status', 'insuranceCoveragePeriods.insuranceProvider', 'insuranceCoveragePeriods.activatedBy', 'insuranceCoveragePeriods.deactivatedBy', 'insuranceDocuments.insuranceProvider', 'sornAppliedBy', 'services', 'reservations'])
             ->findOrFail($id);
         $this->sortCarHistoryRelations($model);
 
@@ -293,9 +334,13 @@ class CarController extends Controller
         $carModels = CarModel::where('tenant_id', $tenant->id)->get();
         $counsels = Counsel::where('tenant_id', $tenant->id)->get();
         $insuranceProviders = InsuranceProvider::where('tenant_id', $tenant->id)->get();
-        $statuses = Status::where('type', 'insurance')->get();
+        $carInsuranceStatuses = Status::where('type', 'insurance')->whereIn('name', ['Active', 'Inactive'])->get()
+            ->sortBy(fn (Status $s) => $s->name === 'Active' ? 0 : 1)
+            ->values();
+        $carInsuranceActiveStatusId = Status::where('type', 'insurance')->where('name', 'Active')->value('id');
+        $carInsuranceInactiveStatusId = Status::where('type', 'insurance')->where('name', 'Inactive')->value('id');
 
-        return view($this->dir . 'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'carInsuranceStatuses', 'carInsuranceActiveStatusId', 'carInsuranceInactiveStatusId'));
     }
 
     // ✅ Updated Update
@@ -303,7 +348,7 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
 
-        if (!$tenant) {
+        if (! $tenant) {
             return redirect()->back()
                 ->with('error', 'No active company found!');
         }
@@ -312,15 +357,19 @@ class CarController extends Controller
             abort(403, 'Unauthorized access to this car.');
         }
 
+        $activeCoverageStatusId = Status::where('type', 'insurance')->where('name', 'Active')->value('id');
+
+        $this->normalizeInsuranceDocumentsUploads($request);
+
         $rules = [
             'company_id' => 'required|exists:companies,id',
             'car_model_id' => 'required|exists:car_models,id',
-            'registration' => 'required|string|unique:cars,registration,' . $car->id,
+            'registration' => 'required|string|unique:cars,registration,'.$car->id,
             'color' => 'required|string',
             'vin' => 'required|string',
             'v5_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'manufacture_year' => 'required|integer|min:1900|max:' . date('Y'),
-            'registration_year' => 'required|integer|min:1900|max:' . date('Y'),
+            'manufacture_year' => 'required|integer|min:1900|max:'.date('Y'),
+            'registration_year' => 'required|integer|min:1900|max:'.date('Y'),
             'purchase_date' => 'required|date',
             'purchase_price' => 'required|numeric|min:0',
             'purchase_type' => 'required|in:imported,uk',
@@ -369,16 +418,34 @@ class CarController extends Controller
 
         if ($request->has('has_insurance')) {
             $rules = array_merge($rules, [
-                'insurance_provider_id' => 'required|exists:insurance_providers,id',
-                'insurance_start_date' => 'required|date',
-                'insurance_expiry_date' => 'required|date',
-                'insurance_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-                'insurance_notify_before_expiry' => 'required|integer|min:1',
-                'insurance_status_id' => 'required|exists:statuses,id',
+                'insurance_provider_id' => [
+                    'nullable',
+                    Rule::exists('insurance_providers', 'id')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+                    Rule::requiredIf(fn () => (int) $request->input('insurance_status_id') === (int) $activeCoverageStatusId),
+                ],
+                'insurance_documents' => 'nullable|array',
+                'insurance_documents.*' => $this->insuranceDocumentItemValidationRules(),
+                'insurance_coverage_start_date' => 'nullable|date',
+                'insurance_coverage_end_date' => 'nullable|date',
+                'insurance_status_id' => [
+                    'required',
+                    Rule::exists('statuses', 'id')->where(fn ($q) => $q->where('type', 'insurance')->whereIn('name', ['Active', 'Inactive'])),
+                ],
             ]);
         }
 
         $validated = $request->validate($rules);
+
+        if ($request->has('has_insurance') && isset($validated['insurance_status_id'])
+            && (int) $validated['insurance_status_id'] === (int) $activeCoverageStatusId) {
+            if (CarInsuranceCoveragePeriod::where('car_id', $car->id)->where('end_date_pending', true)->exists()) {
+                return redirect()->back()
+                    ->withErrors([
+                        'insurance_status_id' => 'Set the coverage end date for the previous inactive period before selecting Active again.',
+                    ])
+                    ->withInput();
+            }
+        }
 
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant) {
@@ -517,49 +584,67 @@ class CarController extends Controller
                 $this->syncReservation($request, $car, $tenant);
 
                 // ==================== Update Insurance ====================
+                $car->load(['insurances.status']);
+                $this->sortCarHistoryRelations($car);
                 $latestInsurance = $car->insurances->first();
+                $prevStatusName = optional($latestInsurance?->status)->name;
+                $prevProviderId = $latestInsurance?->insurance_provider_id;
 
                 if ($request->has('has_insurance')) {
+                    $coverageStatus = Status::findOrFail($validated['insurance_status_id']);
+                    $uploadedDocs = $this->storeInsuranceDocumentFiles($request);
+
                     $insuranceData = [
                         'tenant_id' => $tenant->id,
-                        'insurance_provider_id' => $validated['insurance_provider_id'],
-                        'start_date' => $validated['insurance_start_date'],
-                        'expiry_date' => $validated['insurance_expiry_date'],
-                        'notify_before_expiry' => $validated['insurance_notify_before_expiry'],
+                        'insurance_provider_id' => $validated['insurance_provider_id'] ?? null,
+                        'start_date' => null,
+                        'expiry_date' => null,
+                        'notify_before_expiry' => null,
                         'status_id' => $validated['insurance_status_id'],
                     ];
 
-                    $newStart = Carbon::parse($validated['insurance_start_date'])->startOfDay();
-                    $newExpiry = Carbon::parse($validated['insurance_expiry_date'])->startOfDay();
-                    $periodChanged = ! $latestInsurance
-                        || ! $latestInsurance->start_date->copy()->startOfDay()->equalTo($newStart)
-                        || ! $latestInsurance->expiry_date->copy()->startOfDay()->equalTo($newExpiry);
-
-                    if ($request->hasFile('insurance_document')) {
-                        $insuranceData['insurance_document'] = $this->uploadFile(
-                            $request->file('insurance_document'),
-                            'uploads/cars/insurance_documents'
-                        );
-                        if (! $periodChanged && $latestInsurance && $latestInsurance->insurance_document) {
-                            $this->deleteFile($latestInsurance->insurance_document, 'uploads/cars/insurance_documents');
-                        }
+                    if ($uploadedDocs !== []) {
+                        $insuranceData['insurance_document'] = end($uploadedDocs)['stored'];
                     } elseif ($latestInsurance && $latestInsurance->insurance_document) {
                         $insuranceData['insurance_document'] = $latestInsurance->insurance_document;
+                    } else {
+                        $insuranceData['insurance_document'] = null;
                     }
 
-                    if ($periodChanged) {
-                        $car->insurances()->create($insuranceData);
-                    } elseif ($latestInsurance) {
+                    if ($latestInsurance) {
                         $latestInsurance->update($insuranceData);
                     } else {
                         $car->insurances()->create($insuranceData);
                     }
+
+                    $this->syncInsuranceCoveragePeriods(
+                        $car,
+                        $prevStatusName,
+                        $prevProviderId,
+                        $coverageStatus->name,
+                        $insuranceData['insurance_provider_id'],
+                        Auth::id(),
+                        $validated['insurance_coverage_start_date'] ?? null,
+                        $validated['insurance_coverage_end_date'] ?? null
+                    );
+
+                    $this->appendCarInsuranceDocumentsFromUploads(
+                        $car->fresh(),
+                        $uploadedDocs,
+                        $insuranceData['insurance_provider_id']
+                    );
+
+                    $this->removeCarInsuranceSnapshotIfInactiveWithRecordedEnd(
+                        $coverageStatus,
+                        $validated['insurance_coverage_end_date'] ?? null,
+                        $car
+                    );
                 } else {
-                    foreach ($car->insurances as $insuranceRow) {
-                        if ($insuranceRow->insurance_document) {
-                            $this->deleteFile($insuranceRow->insurance_document, 'uploads/cars/insurance_documents');
-                        }
-                    }
+                    CarInsuranceCoveragePeriod::where('car_id', $car->id)->whereNull('deactivated_at')->update([
+                        'deactivated_at' => now(),
+                        'deactivated_by_user_id' => Auth::id(),
+                        'end_date_pending' => false,
+                    ]);
                     $car->insurances()->delete();
                 }
 
@@ -567,13 +652,13 @@ class CarController extends Controller
             });
 
             return redirect()
-                ->route($this->url . 'edit', $updatedCar)
+                ->route($this->url.'edit', $updatedCar)
                 ->with('success', 'Car updated successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error updating car: ' . $e->getMessage());
+                ->with('error', 'Error updating car: '.$e->getMessage());
         }
     }
 
@@ -589,7 +674,7 @@ class CarController extends Controller
 
         try {
             DB::transaction(function () use ($car) {
-                $car->load(['mots', 'phvs', 'insurances', 'services']);
+                $car->load(['mots', 'phvs', 'insurances', 'insuranceDocuments', 'services']);
                 $this->deleteCarFiles($car);
                 $car->mots()->delete();
                 $car->roadTaxes()->delete();
@@ -600,12 +685,12 @@ class CarController extends Controller
                 $car->delete();
             });
 
-            return redirect()->route($this->url . 'index')
+            return redirect()->route($this->url.'index')
                 ->with('success', 'Car deleted successfully.');
 
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error deleting car: ' . $e->getMessage());
+                ->with('error', 'Error deleting car: '.$e->getMessage());
         }
     }
 
@@ -637,7 +722,7 @@ class CarController extends Controller
 
         $insurances = $car->insurances
             ->sortByDesc(function ($i) {
-                return [optional($i->expiry_date)->timestamp ?? 0, $i->id];
+                return $i->id;
             })
             ->values();
         $car->setRelation('insurances', $insurances);
@@ -749,7 +834,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'status-report', [
+        return view($this->dir.'status-report', [
             'cars' => $cars,
             'status' => $status,
             'statusLabel' => $statuses[$status],
@@ -767,7 +852,7 @@ class CarController extends Controller
             ->filter(fn (Car $car) => $car->isAvailableForRent())
             ->groupBy(fn (Car $car) => $car->latestPhvCounselName() ?: 'No PHV Council');
 
-        return view($this->dir . 'available-by-phv', compact('cars'));
+        return view($this->dir.'available-by-phv', compact('cars'));
     }
 
     public function awaitingPhv()
@@ -781,7 +866,7 @@ class CarController extends Controller
             ->latest()
             ->get();
 
-        return view($this->dir . 'status-report', [
+        return view($this->dir.'status-report', [
             'cars' => $cars,
             'status' => 'awaiting_phv',
             'statusLabel' => 'Awaiting PHV',
@@ -945,6 +1030,7 @@ class CarController extends Controller
             if ($activeReservation) {
                 $activeReservation->update(['status' => 'cancelled']);
             }
+
             return;
         }
 
@@ -955,6 +1041,7 @@ class CarController extends Controller
             if ($car->fleet_status === 'reserved') {
                 $car->update(['fleet_status' => 'available_for_rent']);
             }
+
             return;
         }
 
@@ -1027,23 +1114,178 @@ class CarController extends Controller
         return $carData;
     }
 
+    /**
+     * Drop empty PHP slots. Re-wrap uploads that have UPLOAD_ERR_OK but fail is_uploaded_file() (seen on
+     * some Local/tunnel/nginx setups) using test mode so validation and move() still work safely on the same temp path.
+     */
+    private function normalizeInsuranceDocumentsUploads(Request $request): void
+    {
+        if (! $request->files->has('insurance_documents')) {
+            return;
+        }
+
+        $raw = $request->file('insurance_documents');
+        $files = $raw instanceof UploadedFile ? [$raw] : (is_array($raw) ? array_values($raw) : []);
+
+        $out = [];
+        foreach ($files as $file) {
+            if (! $file instanceof UploadedFile || $file->getError() === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+
+            if ($file->getError() !== UPLOAD_ERR_OK) {
+                $out[] = $file;
+
+                continue;
+            }
+
+            if ($file->isValid()) {
+                $out[] = $file;
+
+                continue;
+            }
+
+            $path = $file->getRealPath() ?: $file->getPathname();
+            if ($path === '' || ! is_readable($path)) {
+                $out[] = $file;
+
+                continue;
+            }
+
+            $out[] = new UploadedFile(
+                $file->getPathname(),
+                $file->getClientOriginalName(),
+                $file->getClientMimeType(),
+                $file->getError(),
+                true
+            );
+        }
+
+        $request->files->remove('insurance_documents');
+
+        if ($out !== []) {
+            $request->files->set('insurance_documents', $out);
+        }
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function insuranceDocumentItemValidationRules(): array
+    {
+        return [
+            'required',
+            'file',
+            'max:10240',
+            /* mimes:png alone fails PNGs guessed as application/octet-stream over some proxies */
+            'extensions:pdf,jpg,jpeg,png',
+            'mimetypes:image/jpeg,image/png,image/x-png,application/pdf,application/octet-stream',
+        ];
+    }
+
+    /**
+     * Trusted extension from file bytes (preferred over client name so we do not
+     * save e.g. JPEG under .png — browsers show a broken image for that mismatch).
+     */
+    private function extensionFromUploadedFileBytes(string $pathname): ?string
+    {
+        $fh = @fopen($pathname, 'rb');
+        if ($fh === false) {
+            return null;
+        }
+
+        try {
+            $head = fread($fh, 12) ?: '';
+
+            return match (true) {
+                str_starts_with($head, "\x89PNG\r\n\x1a\n") => 'png',
+                strncmp($head, "\xFF\xD8\xFF", 3) === 0 => 'jpg',
+                strncmp($head, '%PDF', 4) === 0 => 'pdf',
+                default => null,
+            };
+        } finally {
+            fclose($fh);
+        }
+    }
+
+    /**
+     * Extension to store on disk. Octet-stream / tunnels may yield bogus client
+     * extension; trust binary headers before the original filename extension.
+     */
+    private function persistedUploadExtensionFromFile(UploadedFile $file): string
+    {
+        $path = $file->getRealPath() ?: $file->getPathname();
+
+        if ($path !== '' && is_readable($path)) {
+            $fromBytes = $this->extensionFromUploadedFileBytes($path);
+            if ($fromBytes !== null) {
+                return $fromBytes;
+            }
+
+            $info = @getimagesize($path);
+            if ($info !== false && isset($info[2])) {
+                return match ($info[2]) {
+                    \IMAGETYPE_JPEG => 'jpg',
+                    \IMAGETYPE_PNG => 'png',
+                    default => 'jpg',
+                };
+            }
+        }
+
+        $client = strtolower($file->getClientOriginalExtension() ?: '');
+        $client = $client === 'jpeg' ? 'jpg' : $client;
+        if (in_array($client, ['pdf', 'jpg', 'png'], true)) {
+            return $client;
+        }
+
+        $guess = strtolower((string) $file->guessExtension());
+        $guess = $guess === 'jpeg' ? 'jpg' : $guess;
+        if (in_array($guess, ['pdf', 'jpg', 'png'], true)) {
+            return $guess;
+        }
+
+        $ext = strtolower((string) $file->extension());
+        $ext = $ext === 'jpeg' ? 'jpg' : $ext;
+        if (in_array($ext, ['pdf', 'jpg', 'png'], true)) {
+            return $ext;
+        }
+
+        $mime = strtolower((string) $file->getMimeType());
+        if (str_contains($mime, 'png')) {
+            return 'png';
+        }
+        if (str_contains($mime, 'jpeg') || str_contains($mime, 'jpg')) {
+            return 'jpg';
+        }
+        if (str_contains($mime, 'pdf')) {
+            return 'pdf';
+        }
+
+        return 'jpg';
+    }
+
     // ✅ Keep your existing helper methods
     private function uploadFile($file, $directory)
     {
+        $ext = $this->persistedUploadExtensionFromFile($file);
         $mimeType = $file->getMimeType();
 
-        if (str_starts_with($mimeType, 'image/')) {
-            $dims = getimagesize($file);
-            $width = $dims[0];
-            $height = $dims[1];
-            $name = time() . '-' . uniqid() . '-' . $width . '-' . $height . '.' . $file->extension();
+        if (str_starts_with($mimeType, 'image/') || in_array($ext, ['jpg', 'png'], true)) {
+            $dims = @getimagesize($file->getRealPath() ?: $file->getPathname());
+            if ($dims !== false && isset($dims[0], $dims[1])) {
+                $width = $dims[0];
+                $height = $dims[1];
+                $name = time().'-'.uniqid().'-'.$width.'-'.$height.'.'.$ext;
+            } else {
+                $name = time().'-'.uniqid().'.'.$ext;
+            }
         } else {
-            $name = time() . '-' . uniqid() . '.' . $file->extension();
+            $name = time().'-'.uniqid().'.'.$ext;
         }
 
         $path = public_path($directory);
 
-        if (!file_exists($path)) {
+        if (! file_exists($path)) {
             mkdir($path, 0755, true);
         }
 
@@ -1057,7 +1299,7 @@ class CarController extends Controller
     private function deleteFile($filename, $directory)
     {
         if ($filename) {
-            $filePath = public_path($directory . '/' . $filename);
+            $filePath = public_path($directory.'/'.$filename);
             if (File::exists($filePath)) {
                 File::delete($filePath);
             }
@@ -1077,49 +1319,259 @@ class CarController extends Controller
         ];
     }
 
+    /**
+     * Normalized list of uploads from insurance_documents[] (single or multiple files per request).
+     *
+     * @return array<int, array{stored: string, original: string|null}>
+     */
+    private function storeInsuranceDocumentFiles(Request $request): array
+    {
+        $raw = $request->file('insurance_documents');
+        if ($raw === null) {
+            return [];
+        }
+
+        $files = is_array($raw) ? $raw : [$raw];
+
+        $out = [];
+        foreach ($files as $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
+            $out[] = [
+                'stored' => $this->uploadFile($file, 'uploads/cars/insurance_documents'),
+                'original' => $file->getClientOriginalName(),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Persist archive rows for each uploaded file (older files kept on disk and in history).
+     *
+     * @param  array<int, array{stored: string, original: string|null}>  $uploads
+     */
+    private function appendCarInsuranceDocumentsFromUploads(Car $car, array $uploads, ?int $providerId): void
+    {
+        if ($uploads === []) {
+            return;
+        }
+
+        $openPeriodId = CarInsuranceCoveragePeriod::where('car_id', $car->id)
+            ->whereNull('deactivated_at')
+            ->where('end_date_pending', false)
+            ->value('id');
+
+        foreach ($uploads as $item) {
+            CarInsuranceDocument::create([
+                'tenant_id' => $car->tenant_id,
+                'car_id' => $car->id,
+                'car_insurance_coverage_period_id' => $openPeriodId,
+                'insurance_provider_id' => $providerId,
+                'document' => $item['stored'],
+                'original_name' => $item['original'],
+            ]);
+        }
+    }
+
+    /**
+     * Inactive plus a recorded coverage end date (no pending end): remove car_insurances so the UI
+     * behaves like "Add Insurance" unchecked while keeping periods/documents history on the car.
+     */
+    private function removeCarInsuranceSnapshotIfInactiveWithRecordedEnd(
+        Status $coverageStatus,
+        ?string $endDateYmd,
+        Car $car
+    ): void {
+        if (strcasecmp($coverageStatus->name ?? '', 'Inactive') !== 0 || ! filled($endDateYmd)) {
+            return;
+        }
+
+        if ($car->insuranceCoverageNeedsEndDate()) {
+            return;
+        }
+
+        $car->insurances()->delete();
+    }
+
+    private function syncInsuranceCoveragePeriods(
+        Car $car,
+        ?string $prevStatusName,
+        ?int $prevProviderId,
+        string $newStatusName,
+        ?int $newProviderId,
+        ?int $actingUserId,
+        ?string $coverageStartDateYmd = null,
+        ?string $coverageEndDateYmd = null
+    ): void {
+        $tenantId = $car->tenant_id;
+        $wasActive = $prevStatusName !== null && strcasecmp($prevStatusName, 'Active') === 0;
+        $isActiveNow = strcasecmp($newStatusName, 'Active') === 0;
+
+        $startDay = $this->parseInsuranceCoverageDay($coverageStartDateYmd);
+        $endDay = $this->parseInsuranceCoverageDay($coverageEndDateYmd);
+
+        if ($wasActive && ! $isActiveNow) {
+            $needsPendingEndDate = $endDay === null;
+            CarInsuranceCoveragePeriod::where('car_id', $car->id)
+                ->whereNull('deactivated_at')
+                ->where('end_date_pending', false)
+                ->update([
+                    'deactivated_at' => $needsPendingEndDate ? null : $endDay,
+                    'deactivated_by_user_id' => $actingUserId,
+                    'end_date_pending' => $needsPendingEndDate,
+                ]);
+
+            return;
+        }
+
+        if (! $isActiveNow) {
+            $this->applyPendingInsuranceCoverageEndDate($car, $endDay, $actingUserId);
+
+            return;
+        }
+
+        if ($wasActive) {
+            $prevPid = $prevProviderId !== null ? (int) $prevProviderId : 0;
+            $newPid = $newProviderId !== null ? (int) $newProviderId : 0;
+            if ($prevPid !== $newPid) {
+                CarInsuranceCoveragePeriod::where('car_id', $car->id)
+                    ->whereNull('deactivated_at')
+                    ->where('end_date_pending', false)
+                    ->update([
+                        'deactivated_at' => Carbon::now(),
+                        'deactivated_by_user_id' => $actingUserId,
+                        'end_date_pending' => false,
+                    ]);
+                CarInsuranceCoveragePeriod::create([
+                    'tenant_id' => $tenantId,
+                    'car_id' => $car->id,
+                    'insurance_provider_id' => $newProviderId,
+                    'activated_at' => $startDay ?? Carbon::now(),
+                    'deactivated_at' => null,
+                    'end_date_pending' => false,
+                    'activated_by_user_id' => $actingUserId,
+                ]);
+            } else {
+                $this->updateOpenCoverageActivatedAtIfUnset($car, $startDay);
+            }
+
+            return;
+        }
+
+        CarInsuranceCoveragePeriod::create([
+            'tenant_id' => $tenantId,
+            'car_id' => $car->id,
+            'insurance_provider_id' => $newProviderId,
+            'activated_at' => $startDay,
+            'deactivated_at' => null,
+            'end_date_pending' => false,
+            'activated_by_user_id' => $actingUserId,
+        ]);
+    }
+
+    private function parseInsuranceCoverageDay(?string $ymd): ?Carbon
+    {
+        if ($ymd === null || $ymd === '') {
+            return null;
+        }
+
+        return Carbon::parse($ymd, config('app.timezone'))->startOfDay();
+    }
+
+    /**
+     * User stayed Inactive but supplied coverage end date to complete a prior inactive-without-end row.
+     */
+    private function applyPendingInsuranceCoverageEndDate(Car $car, ?Carbon $endDay, ?int $actingUserId): void
+    {
+        if ($endDay === null) {
+            return;
+        }
+
+        $period = CarInsuranceCoveragePeriod::where('car_id', $car->id)
+            ->where('end_date_pending', true)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($period === null) {
+            return;
+        }
+
+        $period->update([
+            'deactivated_at' => $endDay,
+            'end_date_pending' => false,
+            'deactivated_by_user_id' => $actingUserId ?? $period->deactivated_by_user_id,
+        ]);
+    }
+
+    private function updateOpenCoverageActivatedAtIfUnset(Car $car, ?Carbon $startDay): void
+    {
+        if ($startDay === null) {
+            return;
+        }
+
+        $period = CarInsuranceCoveragePeriod::where('car_id', $car->id)
+            ->whereNull('deactivated_at')
+            ->where('end_date_pending', false)
+            ->first();
+
+        if ($period === null || $period->activated_at !== null) {
+            return;
+        }
+
+        $period->update(['activated_at' => $startDay]);
+    }
+
     private function downloadCarFile(Car $car, string $directory, ?string $filename, string $type)
     {
         $tenant = Auth::user()->currentTenant();
         abort_unless($tenant && $car->tenant_id === $tenant->id, 403);
         abort_unless($filename, 404);
 
-        $path = public_path($directory . '/' . $filename);
+        $path = public_path($directory.'/'.$filename);
         abort_unless(File::exists($path), 404);
 
         $extension = pathinfo($filename, PATHINFO_EXTENSION);
         $registration = preg_replace('/[^A-Za-z0-9]/', '', $car->registration);
 
-        return response()->download($path, $registration . '-' . $type . '.' . $extension);
+        return response()->download($path, $registration.'-'.$type.'.'.$extension);
     }
 
     private function deleteCarFiles($car)
     {
         $filesToDelete = [
-            $car->v5_document ? public_path('uploads/cars/' . $car->v5_document) : null,
-            $car->old_log_book ? public_path('uploads/cars/log_book/' . $car->old_log_book) : null,
+            $car->v5_document ? public_path('uploads/cars/'.$car->v5_document) : null,
+            $car->old_log_book ? public_path('uploads/cars/log_book/'.$car->old_log_book) : null,
         ];
 
         foreach ($car->mots as $mot) {
             if ($mot->document) {
-                $filesToDelete[] = public_path('uploads/cars/mot_documents/' . $mot->document);
+                $filesToDelete[] = public_path('uploads/cars/mot_documents/'.$mot->document);
             }
         }
 
         foreach ($car->phvs as $phv) {
             if ($phv->document) {
-                $filesToDelete[] = public_path('uploads/cars/phv_documents/' . $phv->document);
+                $filesToDelete[] = public_path('uploads/cars/phv_documents/'.$phv->document);
+            }
+        }
+
+        foreach ($car->insuranceDocuments as $insuranceDocArch) {
+            if ($insuranceDocArch->document) {
+                $filesToDelete[] = public_path('uploads/cars/insurance_documents/'.$insuranceDocArch->document);
             }
         }
 
         foreach ($car->insurances as $insurance) {
             if ($insurance->insurance_document) {
-                $filesToDelete[] = public_path('uploads/cars/insurance_documents/' . $insurance->insurance_document);
+                $filesToDelete[] = public_path('uploads/cars/insurance_documents/'.$insurance->insurance_document);
             }
         }
 
         foreach ($car->services as $service) {
             if ($service->document) {
-                $filesToDelete[] = public_path('uploads/cars/service_documents/' . $service->document);
+                $filesToDelete[] = public_path('uploads/cars/service_documents/'.$service->document);
             }
         }
 

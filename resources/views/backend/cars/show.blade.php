@@ -411,15 +411,17 @@
 
                         <!-- Insurance Information -->
                         @php
-                            $insurancesSorted = $car->insurances;
-                            $latestInsurance = $insurancesSorted->count() > 0 ? $insurancesSorted->first() : null;
-                            $olderInsurances = $insurancesSorted->count() > 1 ? $insurancesSorted->slice(1) : collect();
+                            $insurancesSorted = $car->insurances->sortByDesc('id')->values();
+                            $latestInsurance = $insurancesSorted->first();
+                            $coveragePeriodRowsShow = $car->insuranceCoveragePeriods ?? collect();
+                            $documentHistoryRowsShow = $car->insuranceDocuments;
+                            $showCarInsuranceHistory = $coveragePeriodRowsShow->isNotEmpty() || $documentHistoryRowsShow->isNotEmpty();
                         @endphp
                         <div class="row mb-4">
                             <div class="col-12 d-flex flex-wrap justify-content-between align-items-center border-bottom pb-2 mb-3">
                                 <h4 class="mb-0">Insurance Information</h4>
-                                @if($olderInsurances->isNotEmpty())
-                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#showInsuranceHistoryModal">View All</button>
+                                @if($showCarInsuranceHistory)
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#carInsuranceHistoryModalShow">View History</button>
                                 @endif
                             </div>
                             @if($latestInsurance)
@@ -429,27 +431,22 @@
                                             <thead class="thead-light">
                                             <tr>
                                                 <th>Provider</th>
-                                                <th>Start Date</th>
-                                                <th>Expiry Date</th>
-                                                <th>Notify Before</th>
-                                                <th>Status</th>
-                                                <th>Document</th>
+                                                <th>Coverage status</th>
+                                                <th>Latest document</th>
                                             </tr>
                                             </thead>
                                             <tbody>
                                                 <tr>
-                                                    <td>{{ $latestInsurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
-                                                    <td>{{ $latestInsurance->start_date->format('d M, Y') }}</td>
-                                                    <td>{{ $latestInsurance->expiry_date->format('d M, Y') }}</td>
-                                                    <td>{{ $latestInsurance->notify_before_expiry }} days</td>
+                                                    <td>{{ $latestInsurance->insuranceProvider->provider_name ?? ($latestInsurance->insurance_provider_id ? '—' : 'N/A') }}</td>
                                                     <td>
-                                                        <span class="badge badge-{{ $latestInsurance->status && $latestInsurance->status->name == 'Active' ? 'success' : 'warning' }}">
+                                                        @php $isAct = $latestInsurance->status && strcasecmp($latestInsurance->status->name, 'Active') === 0; @endphp
+                                                        <span class="badge badge-{{ $isAct ? 'success' : 'secondary' }}">
                                                             {{ $latestInsurance->status->name ?? 'N/A' }}
                                                         </span>
                                                     </td>
                                                     <td>
                                                         @if($latestInsurance->insurance_document)
-                                                            <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                            <a href="{{ asset('uploads/cars/insurance_documents/' . $latestInsurance->insurance_document) }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">
                                                                 <i class="fa fa-file"></i> View
                                                             </a>
                                                         @else
@@ -459,6 +456,7 @@
                                                 </tr>
                                             </tbody>
                                         </table>
+                                        <p class="small text-muted mb-0">Policy expiry and reminder timings are maintained on Insurance Provider records. All uploads are listed under <strong>View History</strong>.</p>
                                     </div>
                                 </div>
                             @else
@@ -467,46 +465,87 @@
                                 </div>
                             @endif
                         </div>
-                        @if($olderInsurances->isNotEmpty())
-                        <div class="modal fade" id="showInsuranceHistoryModal" tabindex="-1" role="dialog" aria-labelledby="showInsuranceHistoryModalLabel" aria-hidden="true">
-                            <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+                        @if($showCarInsuranceHistory)
+                        <div class="modal fade" id="carInsuranceHistoryModalShow" tabindex="-1" role="dialog" aria-labelledby="carInsuranceHistoryModalShowLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
                                 <div class="modal-content">
                                     <div class="modal-header">
-                                        <h5 class="modal-title" id="showInsuranceHistoryModalLabel">Previous insurance records</h5>
+                                        <h5 class="modal-title mb-0" id="carInsuranceHistoryModalShowLabel">Insurance history</h5>
                                         <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                                     </div>
-                                    <div class="modal-body p-0">
-                                        <div class="table-responsive">
-                                            <table class="table table-bordered mb-0">
-                                                <thead class="thead-light">
-                                                    <tr>
-                                                        <th>Provider</th>
-                                                        <th>Start</th>
-                                                        <th>Expiry</th>
-                                                        <th>Notify</th>
-                                                        <th>Status</th>
-                                                        <th>Document</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach($olderInsurances as $insurance)
-                                                    <tr>
-                                                        <td>{{ $insurance->insuranceProvider->provider_name ?? 'N/A' }}</td>
-                                                        <td>{{ $insurance->start_date->format('d M, Y') }}</td>
-                                                        <td>{{ $insurance->expiry_date->format('d M, Y') }}</td>
-                                                        <td>{{ $insurance->notify_before_expiry }} days</td>
-                                                        <td>{{ $insurance->status->name ?? 'N/A' }}</td>
-                                                        <td>
-                                                            @if($insurance->insurance_document)
-                                                                <a href="{{ asset('uploads/cars/insurance_documents/' . $insurance->insurance_document) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
-                                                            @else
-                                                                <span class="text-muted">—</span>
-                                                            @endif
-                                                        </td>
-                                                    </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
+                                    <div class="modal-body">
+                                        <ul class="nav nav-tabs mb-2" role="tablist">
+                                            <li class="nav-item">
+                                                <a class="nav-link active" data-toggle="tab" href="#car-show-ins-cover" role="tab">Coverage periods</a>
+                                            </li>
+                                            <li class="nav-item">
+                                                <a class="nav-link" data-toggle="tab" href="#car-show-ins-docs" role="tab">Documents</a>
+                                            </li>
+                                        </ul>
+                                        <div class="tab-content">
+                                            <div class="tab-pane fade show active" id="car-show-ins-cover" role="tabpanel">
+                                                @if($coveragePeriodRowsShow->isEmpty())
+                                                    <p class="text-muted mb-0">No coverage periods recorded.</p>
+                                                @else
+                                                    <div class="table-responsive">
+                                                        <table class="table table-bordered mb-0">
+                                                            <thead class="thead-light">
+                                                                <tr><th>Insurance provider</th><th>Active from</th><th>Activated by</th><th>Active until</th><th>Ended by</th></tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach($coveragePeriodRowsShow as $period)
+                                                                <tr>
+                                                                    <td>{{ $period->insuranceProvider->provider_name ?? '—' }}</td>
+                                                                    <td>{{ $period->activated_at?->format('d M Y, H:i') ?? '—' }}</td>
+                                                                    <td>{{ $period->activatedBy?->name ?? '—' }}</td>
+                                                                    <td>@if(($period->end_date_pending ?? false) && !$period->deactivated_at)
+                                                                            <span class="text-muted">Pending</span>
+                                                                        @elseif($period->deactivated_at)
+                                                                            {{ $period->deactivated_at->format('d M Y, H:i') }}
+                                                                        @else
+                                                                            Current
+                                                                        @endif</td>
+                                                                    <td>@if(($period->end_date_pending ?? false) && !$period->deactivated_at)
+                                                                            {{ $period->deactivatedBy?->name ?? '—' }}
+                                                                        @elseif($period->deactivated_at)
+                                                                            {{ $period->deactivatedBy?->name ?? '—' }}
+                                                                        @else
+                                                                            —
+                                                                        @endif</td>
+                                                                </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="tab-pane fade" id="car-show-ins-docs" role="tabpanel">
+                                                @if($documentHistoryRowsShow->isEmpty())
+                                                    <p class="text-muted mb-0">No documents uploaded.</p>
+                                                @else
+                                                    <div class="table-responsive">
+                                                        <table class="table table-bordered mb-0">
+                                                            <thead class="thead-light">
+                                                                <tr><th>Uploaded</th><th>Provider (at upload)</th><th>File</th><th style="width:200px">Actions</th></tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach($documentHistoryRowsShow as $histDoc)
+                                                                    @php $u = $histDoc->publicUrl(); $lab = $histDoc->original_name ?: $histDoc->document; @endphp
+                                                                    <tr>
+                                                                        <td>{{ $histDoc->created_at?->format('d M Y, H:i') ?? '—' }}</td>
+                                                                        <td>{{ $histDoc->insuranceProvider->provider_name ?? '—' }}</td>
+                                                                        <td>{{ $lab }}</td>
+                                                                        <td>
+                                                                            <a href="{{ $u }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View</a>
+                                                                            <a href="{{ $u }}" target="_blank" rel="noopener noreferrer" download="{{ $histDoc->document }}" class="btn btn-sm btn-outline-secondary">Download</a>
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                @endif
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
