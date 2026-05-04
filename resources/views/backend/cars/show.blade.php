@@ -175,8 +175,8 @@
                                 <div class="col-md-6 mb-3">
                                     <strong>V5 Document:</strong>
                                     <p class="mb-0">
-                                        <a href="{{ route('cars.download.v5', $car) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                            <i class="fa fa-file-pdf"></i> Download Document
+                                        <a href="{{ route('cars.view.v5', $car) }}" target="_blank" class="btn btn-sm btn-outline-primary" rel="noopener">
+                                            <i class="fa fa-file"></i> View Document
                                         </a>
                                     </p>
                                 </div>

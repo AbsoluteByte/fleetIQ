@@ -790,6 +790,11 @@ class CarController extends Controller
         ]);
     }
 
+    public function viewV5(Car $car)
+    {
+        return $this->viewCarFileInline($car, 'uploads/cars', $car->v5_document);
+    }
+
     public function downloadV5(Car $car)
     {
         return $this->downloadCarFile($car, 'uploads/cars', $car->v5_document, 'v5');
@@ -1109,6 +1114,21 @@ class CarController extends Controller
         $registration = preg_replace('/[^A-Za-z0-9]/', '', $car->registration);
 
         return response()->download($path, $registration . '-' . $type . '.' . $extension);
+    }
+
+    /**
+     * Serve a car file for viewing in the browser (Content-Disposition: inline).
+     */
+    private function viewCarFileInline(Car $car, string $directory, ?string $filename)
+    {
+        $tenant = Auth::user()->currentTenant();
+        abort_unless($tenant && $car->tenant_id === $tenant->id, 403);
+        abort_unless($filename, 404);
+
+        $path = public_path($directory . '/' . $filename);
+        abort_unless(File::exists($path), 404);
+
+        return response()->file($path);
     }
 
     private function deleteCarFiles($car)

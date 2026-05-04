@@ -99,7 +99,7 @@
                    accept=".pdf,.jpg,.jpeg,.png"
                    data-has-v5="{{ isset($model) && $model->id && $model->v5_document ? '1' : '0' }}">
             @if(isset($model) && $model->id && $model->v5_document)
-                <small class="text-muted">Current: <a href="{{ route('cars.download.v5', $model) }}" target="_blank">Download Document</a></small>
+                <small class="text-muted">Current: <a href="{{ route('cars.view.v5', $model) }}" target="_blank" rel="noopener">View Document</a></small>
             @endif
             @error('v5_document')
             <div class="invalid-feedback">{{ $message }}</div>
