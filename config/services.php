@@ -46,4 +46,9 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
     ],
 
+    'claims_api' => [
+        'token' => env('CLAIMS_API_TOKEN'),
+        'tenant_id' => env('CLAIMS_API_TENANT_ID'),
+    ],
+
 ];
