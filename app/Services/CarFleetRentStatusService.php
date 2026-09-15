@@ -23,6 +23,7 @@ class CarFleetRentStatusService
             Car::FLEET_STATUS_STOLEN,
             Car::FLEET_STATUS_SOLD,
             'damaged',
+            Car::FLEET_STATUS_MECHANICAL_REPAIR,
             'for_sale',
             'sorn',
         ];

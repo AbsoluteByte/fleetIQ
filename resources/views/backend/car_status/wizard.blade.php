@@ -5,6 +5,7 @@
         \App\Models\Car::FLEET_STATUS_NON_COMPLIANT => 'Non-Compliant',
         'reserved' => 'Reserved',
         'damaged' => 'Damaged',
+        \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR => 'Mechanical Repair',
         'written_off' => 'Written Off',
         'stolen' => 'Stolen',
         'for_sale' => 'For Sale',

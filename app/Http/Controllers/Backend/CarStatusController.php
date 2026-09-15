@@ -219,6 +219,8 @@ class CarStatusController extends Controller
     {
         return match ($status) {
             'damaged' => $this->validateDamagedPayload($request, $tenantId),
+            Car::FLEET_STATUS_MECHANICAL_REPAIR => app(CarStatusChangeService::class)
+                ->validateMechanicalRepairEditablePayload($request),
             'written_off' => $this->validateWrittenOffPayload($request, $tenantId),
             'stolen' => $this->validateStolenPayload($request, $tenantId),
             'for_sale' => $this->validateForSalePayload($request),

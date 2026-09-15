@@ -78,6 +78,41 @@
 <div id="fleet_step2" class="{{ $activeTargetStatus ? '' : 'd-none' }}">
     <h5 id="fleet_step2_summary" class="border-bottom pb-2 mb-3 text-center">{{ $step2SummaryText }}</h5>
 
+    {{-- Close mechanical repair (when leaving that status) --}}
+    <div class="fleet-status-panel d-none" data-status="mechanical_repair_close">
+        <h6 class="border-bottom pb-2 mb-3">Complete mechanical repair</h6>
+        <p class="text-muted small">This vehicle is currently in Mechanical Repair. Provide completion details before changing status.</p>
+        <div class="row">
+            <div class="col-md-6 form-group">
+                <label for="fleet_mech_close_completed_date">Date vehicle left / completed <span class="text-danger">*</span></label>
+                <input type="date" name="payload[completed_date]" id="fleet_mech_close_completed_date"
+                       class="form-control @error('payload.completed_date') is-invalid @enderror"
+                       value="{{ $payloadDateOld('completed_date') }}">
+                @error('payload.completed_date')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group">
+                <label for="fleet_mech_close_progress_notes">Repair / progress notes</label>
+                <textarea name="payload[repair_progress_notes]" id="fleet_mech_close_progress_notes" rows="2"
+                          class="form-control @error('payload.repair_progress_notes') is-invalid @enderror"
+                          placeholder="Optional update">{{ $payloadOld('repair_progress_notes') }}</textarea>
+                @error('payload.repair_progress_notes')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group">
+                <label for="fleet_mech_close_completion_notes">Leaving / completion notes <span class="text-danger">*</span></label>
+                <textarea name="payload[completion_notes]" id="fleet_mech_close_completion_notes" rows="3"
+                          class="form-control @error('payload.completion_notes') is-invalid @enderror"
+                          placeholder="Repair completed, outstanding issues, or reason the vehicle left mechanical repair">{{ $payloadOld('completion_notes') }}</textarea>
+                @error('payload.completion_notes')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+        </div>
+    </div>
+
     {{-- Available for rent --}}
     <div class="fleet-status-panel {{ $activeTargetStatus === 'available_for_rent' ? '' : 'd-none' }}"
          data-status="available_for_rent">
@@ -363,6 +398,79 @@
                 <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
             </div>
+        </div>
+    </div>
+
+    {{-- Mechanical repair --}}
+    <div class="fleet-status-panel {{ $activeTargetStatus === \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR ? '' : 'd-none' }}"
+         data-status="{{ \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR }}">
+        <div class="row">
+            <div class="col-md-6 form-group">
+                <label for="fleet_mech_issue_reported_date">Date issue reported <span class="text-danger">*</span></label>
+                <input type="date" name="payload[issue_reported_date]" id="fleet_mech_issue_reported_date"
+                       class="form-control @error('payload.issue_reported_date') is-invalid @enderror"
+                       value="{{ $payloadDateOld('issue_reported_date') }}">
+                @error('payload.issue_reported_date')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-6 form-group">
+                <label for="fleet_mech_allocation_date">Allocation date <span class="text-danger">*</span></label>
+                <input type="date" name="payload[allocation_date]" id="fleet_mech_allocation_date"
+                       class="form-control @error('payload.allocation_date') is-invalid @enderror"
+                       value="{{ $payloadDateOld('allocation_date') }}">
+                @error('payload.allocation_date')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-6 form-group">
+                <label for="fleet_mech_allocated_to">Allocated to <span class="text-danger">*</span></label>
+                <input type="text" name="payload[allocated_to]" id="fleet_mech_allocated_to"
+                       class="form-control @error('payload.allocated_to') is-invalid @enderror"
+                       maxlength="255" value="{{ $payloadOld('allocated_to') }}"
+                       placeholder="Mechanic or person responsible">
+                @error('payload.allocated_to')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group">
+                <label for="fleet_mech_issue_details">Issue / fault details <span class="text-danger">*</span></label>
+                <textarea name="payload[issue_details]" id="fleet_mech_issue_details" rows="3"
+                          class="form-control @error('payload.issue_details') is-invalid @enderror"
+                          placeholder="What is wrong with the vehicle">{{ $payloadOld('issue_details') }}</textarea>
+                @error('payload.issue_details')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            <div class="col-md-12 form-group">
+                <label for="fleet_mech_repair_progress_notes">Repair / progress notes</label>
+                <textarea name="payload[repair_progress_notes]" id="fleet_mech_repair_progress_notes" rows="2"
+                          class="form-control @error('payload.repair_progress_notes') is-invalid @enderror"
+                          placeholder="Optional">{{ $payloadOld('repair_progress_notes') }}</textarea>
+                @error('payload.repair_progress_notes')
+                <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+            </div>
+            @if($editCurrentStatus && $activeTargetStatus === \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR)
+                <div class="col-md-6 form-group">
+                    <label for="fleet_mech_completed_date">Date vehicle left / completed</label>
+                    <input type="date" name="payload[completed_date]" id="fleet_mech_completed_date"
+                           class="form-control @error('payload.completed_date') is-invalid @enderror"
+                           value="{{ $payloadDateOld('completed_date') }}">
+                    @error('payload.completed_date')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-md-12 form-group">
+                    <label for="fleet_mech_completion_notes">Leaving / completion notes</label>
+                    <textarea name="payload[completion_notes]" id="fleet_mech_completion_notes" rows="2"
+                              class="form-control @error('payload.completion_notes') is-invalid @enderror"
+                              placeholder="Optional until the vehicle leaves mechanical repair">{{ $payloadOld('completion_notes') }}</textarea>
+                    @error('payload.completion_notes')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+            @endif
         </div>
     </div>
 

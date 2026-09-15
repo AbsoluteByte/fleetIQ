@@ -25,6 +25,8 @@ class Car extends Model
 
     public const FLEET_STATUS_SOLD = 'sold';
 
+    public const FLEET_STATUS_MECHANICAL_REPAIR = 'mechanical_repair';
+
     protected $fillable = [
         'tenant_id', 'company_id', 'car_model_id', 'registration', 'color',
         'vin', 'v5_document', 'manufacture_year', 'registration_year',
@@ -235,6 +237,7 @@ class Car extends Model
             'reserved' => 'Reserved',
             'vehicle_swap' => 'Vehicle Swap',
             'damaged' => 'Damaged',
+            self::FLEET_STATUS_MECHANICAL_REPAIR => 'Mechanical Repair',
             'written_off' => 'Written Off',
             'stolen' => 'Stolen',
             'for_sale' => 'For Sale',
@@ -462,6 +465,7 @@ class Car extends Model
             self::FLEET_STATUS_NON_COMPLIANT,
             self::FLEET_STATUS_ON_RENT,
             'damaged',
+            self::FLEET_STATUS_MECHANICAL_REPAIR,
             'written_off',
             'stolen',
             'for_sale',

@@ -31,6 +31,7 @@ class CarStatusChangeService
         Car::FLEET_STATUS_NON_COMPLIANT,
         'reserved',
         'damaged',
+        Car::FLEET_STATUS_MECHANICAL_REPAIR,
         'written_off',
         'stolen',
         'for_sale',
@@ -40,6 +41,7 @@ class CarStatusChangeService
     private const BLOCKED_FLEET_STATUSES = [
         Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
         'damaged',
+        Car::FLEET_STATUS_MECHANICAL_REPAIR,
         'written_off',
         'stolen',
         'for_sale',
@@ -61,6 +63,11 @@ class CarStatusChangeService
             $vehicleSwapId = null;
             $statusData = [];
 
+            if ($previousStatus === Car::FLEET_STATUS_MECHANICAL_REPAIR
+                && $target !== Car::FLEET_STATUS_MECHANICAL_REPAIR) {
+                $this->finalizeOpenMechanicalRepairEpisode($request, $car);
+            }
+
             switch ($target) {
                 case Car::FLEET_STATUS_PREPARATION_FOR_PHVL:
                     $statusData = $this->applyPreparationForPhvl($car, $previousStatus);
@@ -80,6 +87,10 @@ class CarStatusChangeService
 
                 case 'damaged':
                     $statusData = $this->applyDamaged($request, $tenant, $car);
+                    break;
+
+                case Car::FLEET_STATUS_MECHANICAL_REPAIR:
+                    $statusData = $this->applyMechanicalRepair($request, $car);
                     break;
 
                 case 'written_off':
@@ -361,6 +372,120 @@ class CarStatusChangeService
 
         $car->update([
             'fleet_status' => 'damaged',
+            'available_from_date' => null,
+        ]);
+
+        return $payload;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function validateMechanicalRepairIntakePayload(Request $request): array
+    {
+        $validated = $request->validate([
+            'payload.issue_reported_date' => 'required|date',
+            'payload.issue_details' => 'required|string',
+            'payload.allocation_date' => 'required|date',
+            'payload.allocated_to' => 'required|string|max:255',
+            'payload.repair_progress_notes' => 'nullable|string',
+            'payload.completed_date' => 'nullable|date',
+            'payload.completion_notes' => 'nullable|string',
+        ]);
+
+        return $this->normalizeMechanicalRepairPayload($validated['payload'] ?? []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function validateMechanicalRepairEditablePayload(Request $request): array
+    {
+        $validated = $request->validate([
+            'payload.issue_reported_date' => 'required|date',
+            'payload.issue_details' => 'required|string',
+            'payload.allocation_date' => 'required|date',
+            'payload.allocated_to' => 'required|string|max:255',
+            'payload.repair_progress_notes' => 'nullable|string',
+            'payload.completed_date' => 'nullable|date',
+            'payload.completion_notes' => 'nullable|string',
+        ]);
+
+        return $this->normalizeMechanicalRepairPayload($validated['payload'] ?? []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validateMechanicalRepairExitPayload(Request $request): array
+    {
+        $validated = $request->validate([
+            'payload.completed_date' => 'required|date',
+            'payload.completion_notes' => 'required|string',
+            'payload.repair_progress_notes' => 'nullable|string',
+        ]);
+
+        return $validated['payload'] ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeMechanicalRepairPayload(array $payload): array
+    {
+        foreach (['repair_progress_notes', 'completion_notes'] as $key) {
+            if (($payload[$key] ?? '') === '') {
+                $payload[$key] = null;
+            }
+        }
+
+        if (($payload['completed_date'] ?? '') === '') {
+            $payload['completed_date'] = null;
+        }
+
+        return $payload;
+    }
+
+    private function finalizeOpenMechanicalRepairEpisode(Request $request, Car $car): void
+    {
+        $exitFields = $this->validateMechanicalRepairExitPayload($request);
+
+        $episode = CarStatusHistory::query()
+            ->where('car_id', $car->id)
+            ->where('new_status', Car::FLEET_STATUS_MECHANICAL_REPAIR)
+            ->latest('id')
+            ->first();
+
+        if (! $episode) {
+            throw ValidationException::withMessages([
+                'payload.completed_date' => __('No mechanical repair episode found to close.'),
+            ]);
+        }
+
+        $existing = is_array($episode->status_data) ? $episode->status_data : [];
+        $merged = array_merge($existing, array_filter(
+            $exitFields,
+            fn ($v) => $v !== null && $v !== ''
+        ));
+
+        $episode->update([
+            'status_data' => $merged,
+            'changed_by' => Auth::id(),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function applyMechanicalRepair(Request $request, Car $car): array
+    {
+        $payload = $this->validateMechanicalRepairIntakePayload($request);
+
+        $this->cancelActiveReservationsAndSwapsForCar($car);
+
+        $car->update([
+            'fleet_status' => Car::FLEET_STATUS_MECHANICAL_REPAIR,
             'available_from_date' => null,
         ]);
 
