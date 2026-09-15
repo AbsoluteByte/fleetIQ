@@ -45,6 +45,18 @@
 
         var amountPaidEl = FV.findField(form, 'amount_paid');
         var amountPaid = amountPaidEl ? FV.parseNumber(FV.fieldValue(amountPaidEl)) : null;
+        var advanceEl = FV.findField(form, 'agreed_advance');
+        var agreedAdvance = advanceEl ? FV.parseNumber(FV.fieldValue(advanceEl)) : null;
+
+        if (amountPaid !== null && agreedAdvance !== null && amountPaid > agreedAdvance) {
+            FV.addError(
+                errors,
+                amountPaidEl,
+                'Amount paid',
+                'Deposit payments cannot exceed the agreed advance. Rent is collected when creating the agreement.'
+            );
+        }
+
         if (amountPaid !== null && amountPaid > 0) {
             FV.requiredField(errors, form, 'payment_method', 'Payment method');
 

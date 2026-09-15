@@ -86,6 +86,22 @@ class PaymentsIndexTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_payments_index_search_finds_driver_by_active_car_registration(): void
+    {
+        $driver = $this->createDriver('Search', 'ByReg', 'search-reg@example.com');
+        $otherDriver = $this->createDriver('Other', 'Driver', 'other@example.com');
+        $this->createAgreement($driver, $this->createCar('FINDME99'));
+        $this->createAgreement($otherDriver, $this->createCar('NOTTHIS1'));
+
+        $response = $this->paymentsDatatableResponse([
+            'search' => ['value' => 'FINDME99'],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonFragment(['vehicle' => 'FINDME99']);
+    }
+
     public function test_payments_index_shows_single_active_agreement_car_registration(): void
     {
         $driver = $this->createDriver('One', 'Agreement', 'one@example.com');

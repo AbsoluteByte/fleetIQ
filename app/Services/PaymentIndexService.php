@@ -44,6 +44,30 @@ class PaymentIndexService
         return $query;
     }
 
+    public function applySearchKeyword(Builder $query, string $keyword): Builder
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            return $query;
+        }
+
+        return $query->where(function (Builder $inner) use ($keyword) {
+            $inner->where('first_name', 'like', "%{$keyword}%")
+                ->orWhere('last_name', 'like', "%{$keyword}%")
+                ->orWhere('phone_number', 'like', "%{$keyword}%")
+                ->orWhere('email', 'like', "%{$keyword}%")
+                ->orWhereHas('agreements', function (Builder $agreementQuery) use ($keyword) {
+                    $agreementQuery->currentlyActive()->where(function (Builder $vehicleMatch) use ($keyword) {
+                        $vehicleMatch->whereHas('car', fn (Builder $car) => $car->where('registration', 'like', "%{$keyword}%"))
+                            ->orWhereHas('replacementVehicleAgreements', function (Builder $replacement) use ($keyword) {
+                                $replacement->currentlyActiveReplacement()
+                                    ->whereHas('car', fn (Builder $car) => $car->where('registration', 'like', "%{$keyword}%"));
+                            });
+                    });
+                });
+        });
+    }
+
     /**
      * @return array<string, mixed>
      */
