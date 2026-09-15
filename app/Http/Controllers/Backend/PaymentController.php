@@ -11,6 +11,7 @@ use App\Support\BatchPaymentInput;
 use App\Services\DriverCreditService;
 use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
+use App\Services\PaymentIndexService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +38,7 @@ class PaymentController extends Controller
         view()->share('plural', Str::plural($this->name));
     }
 
-    public function index()
+    public function index(Request $request, PaymentIndexService $indexService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -46,26 +47,92 @@ class PaymentController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        $drivers = Driver::query()
-            ->where('tenant_id', $tenant->id)
-            ->withPaymentIndexAggregates()
-            ->with(['agreements' => fn ($query) => $query->currentlyActive()->with([
-                'car',
-                'paymentBankAccount',
-                'replacementVehicleAgreements' => fn ($replacementQuery) => $replacementQuery
-                    ->currentlyActiveReplacement()
-                    ->with('car'),
-            ])])
-            ->withMax(['payments as last_posted_payment_date' => function ($query) {
-                $query->posted();
-            }], 'payment_date')
-            ->withMax('invoices as latest_invoice_date', 'invoice_date')
-            ->withCount(['invoices', 'payments'])
-            ->orderBy('first_name')
-            ->orderBy('last_name')
-            ->get();
+        if ($request->ajax()) {
+            if ($request->boolean('export')) {
+                return $this->paymentsExport($request, $indexService);
+            }
 
-        return view($this->dir.'index', compact('drivers'));
+            return $this->paymentsDataTable($request, $indexService);
+        }
+
+        return view($this->dir.'index');
+    }
+
+    private function paymentsDataTable(Request $request, PaymentIndexService $indexService)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        $query = $indexService->baseQuery($tenant->id);
+        $indexService->applyFilters($query, $request);
+
+        $rowCache = [];
+        $rowFor = function (Driver $driver) use ($indexService, &$rowCache): array {
+            return $rowCache[$driver->id] ??= $indexService->rowPayload($driver);
+        };
+
+        return datatables()->eloquent($query)
+            ->addColumn('driver', fn (Driver $driver) => $rowFor($driver)['driver'])
+            ->addColumn('vehicle', fn (Driver $driver) => $rowFor($driver)['vehicle'])
+            ->addColumn('pay_to', fn (Driver $driver) => $rowFor($driver)['pay_to'])
+            ->addColumn('phone', fn (Driver $driver) => $rowFor($driver)['phone'])
+            ->addColumn('invoices_count', fn (Driver $driver) => (string) $rowFor($driver)['invoices_count'])
+            ->addColumn('payments_count', fn (Driver $driver) => (string) $rowFor($driver)['payments_count'])
+            ->addColumn('payment_due', fn (Driver $driver) => $rowFor($driver)['payment_due'])
+            ->addColumn('last_payment', fn (Driver $driver) => $rowFor($driver)['last_payment'])
+            ->addColumn('total_due_html', fn (Driver $driver) => $rowFor($driver)['total_due_html'])
+            ->addColumn('credit_html', fn (Driver $driver) => $rowFor($driver)['credit_html'])
+            ->addColumn('actions_html', fn (Driver $driver) => $rowFor($driver)['actions_html'])
+            ->filter(function ($query) use ($request) {
+                $keyword = trim((string) data_get($request->input('search'), 'value', ''));
+                if ($keyword === '') {
+                    return;
+                }
+
+                $query->where(function ($inner) use ($keyword) {
+                    $inner->where('first_name', 'like', "%{$keyword}%")
+                        ->orWhere('last_name', 'like', "%{$keyword}%")
+                        ->orWhere('phone_number', 'like', "%{$keyword}%")
+                        ->orWhere('email', 'like', "%{$keyword}%");
+                });
+            })
+            ->rawColumns(['driver', 'total_due_html', 'credit_html', 'actions_html'])
+            ->toJson();
+    }
+
+    private function paymentsExport(Request $request, PaymentIndexService $indexService)
+    {
+        $tenant = Auth::user()->currentTenant();
+
+        $query = $indexService->baseQuery($tenant->id);
+        $indexService->applyFilters($query, $request);
+
+        $keyword = trim((string) $request->input('search'));
+        if ($keyword !== '') {
+            $query->where(function ($inner) use ($keyword) {
+                $inner->where('first_name', 'like', "%{$keyword}%")
+                    ->orWhere('last_name', 'like', "%{$keyword}%")
+                    ->orWhere('phone_number', 'like', "%{$keyword}%")
+                    ->orWhere('email', 'like', "%{$keyword}%");
+            });
+        }
+
+        $rows = $indexService->rowsForExport($query->get());
+
+        return response()->json([
+            'rows' => array_map(fn (array $row) => [
+                strip_tags(str_replace('<br>', ' ', $row['driver'])),
+                $row['vehicle'],
+                $row['pay_to'],
+                $row['phone'],
+                (string) $row['invoices_count'],
+                (string) $row['payments_count'],
+                $row['payment_due'],
+                $row['last_payment'],
+                $row['export_total_due'],
+                $row['export_credit'],
+            ], $rows),
+            'dfs_statuses' => array_map(fn (array $row) => $row['filter_dfs_export_status'], $rows),
+        ]);
     }
 
     public function driver(Driver $driver)

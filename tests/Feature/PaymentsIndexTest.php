@@ -92,13 +92,15 @@ class PaymentsIndexTest extends TestCase
         $car = $this->createCar('REG111');
         $this->createAgreement($driver, $car);
 
-        $response = $this->get(route('payments.index'));
+        $pageResponse = $this->get(route('payments.index'));
+        $pageResponse->assertOk();
+        $pageResponse->assertSee('Vehicle');
+        $pageResponse->assertDontSee('<th>Email</th>', false);
 
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('Vehicle');
-        $response->assertSee('REG111');
-        $response->assertDontSee('one@example.com');
-        $response->assertDontSee('<th>Email</th>', false);
+        $response->assertJsonFragment(['vehicle' => 'REG111']);
+        $response->assertJsonMissing(['vehicle' => 'one@example.com']);
     }
 
     public function test_payments_index_shows_multiple_active_agreement_registrations_comma_separated(): void
@@ -109,11 +111,9 @@ class PaymentsIndexTest extends TestCase
         $this->createAgreement($driver, $carA);
         $this->createAgreement($driver, $carB);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('REGAAA, REGBBB');
-        $response->assertDontSee('multi@example.com');
+        $response->assertJsonFragment(['vehicle' => 'REGAAA, REGBBB']);
     }
 
     public function test_payments_index_shows_replacement_agreement_car_registration_with_active_agreement(): void
@@ -124,10 +124,9 @@ class PaymentsIndexTest extends TestCase
         $parentAgreement = $this->createAgreement($driver, $activeCar);
         $this->createReplacementAgreement($driver, $replacementCar, $parentAgreement);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('REG111, REPREPL');
+        $response->assertJsonFragment(['vehicle' => 'REG111, REPREPL']);
     }
 
     public function test_payments_index_excludes_ended_replacement_agreement_registration(): void
@@ -151,11 +150,10 @@ class PaymentsIndexTest extends TestCase
             'status_id' => $this->replacementAgreementStatus->id,
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('REG222');
-        $response->assertDontSee('OLDREPL');
+        $response->assertJsonFragment(['vehicle' => 'REG222']);
+        $response->assertJsonMissing(['vehicle' => 'OLDREPL']);
     }
 
     public function test_payments_index_shows_dash_when_driver_has_no_active_agreement(): void
@@ -176,12 +174,10 @@ class PaymentsIndexTest extends TestCase
             'status_id' => $this->activeAgreementStatus->id,
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('—');
-        $response->assertDontSee('REG999');
-        $response->assertDontSee('none@example.com');
+        $response->assertJsonFragment(['vehicle' => '—']);
+        $response->assertJsonMissing(['vehicle' => 'REG999']);
     }
 
     public function test_payments_index_includes_advanced_filter_panel_and_row_filter_metadata(): void
@@ -213,22 +209,27 @@ class PaymentsIndexTest extends TestCase
             'status' => 'pending',
         ]);
 
-        $response = $this->get(route('payments.index'));
+        $pageResponse = $this->get(route('payments.index'));
+        $pageResponse->assertOk();
+        $pageResponse->assertSee('id="paymentsFilterPanel"', false);
+        $pageResponse->assertSee('id="paymentsFilterStatus"', false);
+        $pageResponse->assertSee('id="paymentsReminderFrom"', false);
+        $pageResponse->assertSee('id="paymentsLastPaymentFrom"', false);
+        $pageResponse->assertSee('id="paymentsLatestInvoiceFrom"', false);
+        $pageResponse->assertSee('Payment Due');
+        $pageResponse->assertSee('Last Payment');
 
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('id="paymentsFilterPanel"', false);
-        $response->assertSee('id="paymentsFilterStatus"', false);
-        $response->assertSee('id="paymentsReminderFrom"', false);
-        $response->assertSee('id="paymentsLastPaymentFrom"', false);
-        $response->assertSee('id="paymentsLatestInvoiceFrom"', false);
-        $response->assertSee('Payment Due');
-        $response->assertSee('Last Payment');
-        $response->assertSee('10 Jul 2026');
-        $response->assertSee('15 Jul 2026');
-        $response->assertSee('data-driver-status="active"', false);
-        $response->assertSee('data-remind-at="2026-07-20T14:30:00', false);
-        $response->assertSee('data-last-payment-date="2026-07-15"', false);
-        $response->assertSee('data-latest-invoice-date="2026-07-10"', false);
+        $response->assertJsonFragment(['payment_due' => '10 Jul 2026']);
+        $response->assertJsonFragment(['last_payment' => '15 Jul 2026']);
+
+        $filteredResponse = $this->paymentsDatatableResponse([
+            'filter_last_payment_from' => '2026-07-15',
+            'filter_last_payment_to' => '2026-07-15',
+        ]);
+        $filteredResponse->assertOk();
+        $filteredResponse->assertJsonPath('data.0.last_payment', '15 Jul 2026');
     }
 
     public function test_payments_index_shows_total_due_and_credit_without_n_plus_one_queries(): void
@@ -257,11 +258,10 @@ class PaymentsIndexTest extends TestCase
             'created_by' => $this->user->id,
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('£150.00');
-        $response->assertSee('£200.00');
+        $response->assertJsonFragment(['total_due_html' => '<strong class="text-danger">£150.00</strong>']);
+        $response->assertJsonFragment(['credit_html' => '<strong class="text-success">£200.00</strong>']);
     }
 
     public function test_payments_index_shows_warning_total_due_when_pending_dfs_payment_exists(): void
@@ -290,14 +290,9 @@ class PaymentsIndexTest extends TestCase
             'created_by' => $this->user->id,
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('text-warning', false);
-        $response->assertSee('js-dfs-pending-amount', false);
-        $response->assertSee('£75.00 pending daily financial sheet approval.', false);
-        $response->assertSee('£150.00', false);
-        $response->assertDontSee('text-danger', false);
+        $response->assertJsonFragment(['total_due_html' => '<strong class="text-warning js-dfs-pending-amount" data-toggle="tooltip" data-placement="top" title="£75.00 pending daily financial sheet approval.">£150.00</strong>']);
     }
 
     public function test_payments_index_shows_paying_company_name_below_driver(): void
@@ -319,10 +314,9 @@ class PaymentsIndexTest extends TestCase
             'paying_company_name' => 'Metro Cars PLC',
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('<span class="paying-company-subtitle d-block">Pays via: Metro Cars PLC</span>', false);
+        $response->assertJsonPath('data.0.driver', fn ($driverHtml) => str_contains((string) $driverHtml, 'Pays via: Metro Cars PLC'));
     }
 
     public function test_payments_index_hides_paying_company_when_not_set(): void
@@ -330,10 +324,9 @@ class PaymentsIndexTest extends TestCase
         $driver = $this->createDriver('No', 'PayingCo', 'no-paying@example.com');
         $this->createAgreement($driver, $this->createCar('REGNOPAY'));
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertDontSee('<span class="paying-company-subtitle', false);
+        $response->assertJsonPath('data.0.driver', fn ($driverHtml) => str_contains((string) $driverHtml, 'No') && str_contains((string) $driverHtml, 'PayingCo') && ! str_contains((string) $driverHtml, 'paying-company-subtitle'));
     }
 
     public function test_payments_index_uses_first_active_agreement_paying_company_only(): void
@@ -368,49 +361,83 @@ class PaymentsIndexTest extends TestCase
             'paying_company_name' => 'Second Company Ltd',
         ]);
 
-        $response = $this->get(route('payments.index'));
-
+        $response = $this->paymentsDatatableResponse();
         $response->assertOk();
-        $response->assertSee('Pays via: First Company Ltd');
-        $response->assertDontSee('Pays via: Second Company Ltd');
+        $response->assertJsonPath('data.0.driver', fn ($driverHtml) => str_contains((string) $driverHtml, 'Pays via: First Company Ltd') && ! str_contains((string) $driverHtml, 'Second Company Ltd'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     */
+    private function paymentsDatatableResponse(array $params = [])
+    {
+        return $this->getJson(route('payments.index', array_merge([
+            'draw' => 1,
+            'start' => 0,
+            'length' => 25,
+        ], $params)), ['X-Requested-With' => 'XMLHttpRequest']);
     }
 
     private function setUpHttpTestExtras(): void
     {
-        Schema::table('tenants', function (Blueprint $table) {
-            $table->unsignedTinyInteger('status')->default(1);
-        });
+        if (! Schema::hasColumn('tenants', 'status')) {
+            Schema::table('tenants', function (Blueprint $table) {
+                $table->unsignedTinyInteger('status')->default(1);
+            });
+        }
 
-        Schema::create('tenant_user', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id');
-            $table->foreignId('user_id');
-            $table->string('role')->default('admin');
-            $table->boolean('is_primary')->default(true);
-            $table->timestamp('joined_at')->nullable();
-            $table->timestamps();
-        });
-        Schema::create('roles', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('guard_name');
-            $table->timestamps();
-        });
-        Schema::create('model_has_roles', function (Blueprint $table) {
-            $table->unsignedBigInteger('role_id');
-            $table->string('model_type');
-            $table->unsignedBigInteger('model_id');
-        });
+        if (! Schema::hasTable('tenant_user')) {
+            Schema::create('tenant_user', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tenant_id');
+                $table->foreignId('user_id');
+                $table->string('role')->default('admin');
+                $table->boolean('is_primary')->default(true);
+                $table->timestamp('joined_at')->nullable();
+                $table->timestamps();
+            });
+        }
 
-        Schema::table('drivers', function (Blueprint $table) {
-            $table->boolean('is_active')->default(true);
-            $table->dateTime('payment_remind_at')->nullable();
-        });
+        if (! Schema::hasTable('roles')) {
+            Schema::create('roles', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->string('guard_name');
+                $table->timestamps();
+            });
+        }
 
-        Schema::table('agreements', function (Blueprint $table) {
-            $table->unsignedBigInteger('parent_agreement_id')->nullable();
-            $table->string('paying_company_name')->nullable();
-        });
+        if (! Schema::hasTable('model_has_roles')) {
+            Schema::create('model_has_roles', function (Blueprint $table) {
+                $table->unsignedBigInteger('role_id');
+                $table->string('model_type');
+                $table->unsignedBigInteger('model_id');
+            });
+        }
+
+        if (! Schema::hasColumn('drivers', 'payment_remind_at')) {
+            Schema::table('drivers', function (Blueprint $table) {
+                $table->dateTime('payment_remind_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('drivers', 'payment_follow_up_notes')) {
+            Schema::table('drivers', function (Blueprint $table) {
+                $table->text('payment_follow_up_notes')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('agreements', 'parent_agreement_id')) {
+            Schema::table('agreements', function (Blueprint $table) {
+                $table->unsignedBigInteger('parent_agreement_id')->nullable();
+            });
+        }
+
+        if (! Schema::hasColumn('agreements', 'paying_company_name')) {
+            Schema::table('agreements', function (Blueprint $table) {
+                $table->string('paying_company_name')->nullable();
+            });
+        }
     }
 
     private function createDriver(string $firstName, string $lastName, string $email): Driver

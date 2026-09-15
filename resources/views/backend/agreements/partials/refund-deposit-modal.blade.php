@@ -194,33 +194,74 @@
             toggleBankAccount();
         }
 
-        document.querySelectorAll('[data-refund-deposit-btn]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                if (btn.disabled) {
-                    return;
+        function applySettlementPreview(preview) {
+            var amount = parseFloat(preview.refund_amount || 0);
+            amountInput.value = amount.toFixed(2);
+            var isRefundDue = amount > 0;
+            paymentFields.classList.toggle('d-none', !isRefundDue);
+            methodSelect.required = isRefundDue;
+            if (!isRefundDue) {
+                methodSelect.value = '';
+            }
+
+            var mapping = [
+                ['refundGrossDeposit', preview.gross_deposit_amount],
+                ['refundDeductions', preview.deductions_amount],
+                ['refundOutstanding', preview.driver_outstanding_amount],
+                ['refundDebtOffset', preview.debt_offset_amount],
+                ['refundRemainingDebt', preview.remaining_debt_amount],
+                ['refundFinalAmount', preview.refund_amount],
+            ];
+
+            mapping.forEach(function (item) {
+                var element = document.getElementById(item[0]);
+                var value = parseFloat(item[1] || 0);
+                element.textContent = '£' + value.toFixed(2);
+            });
+
+            toggleBankAccount();
+        }
+
+        function resetSettlementPreview() {
+            applySettlementPreview({
+                gross_deposit_amount: 0,
+                deductions_amount: 0,
+                driver_outstanding_amount: 0,
+                debt_offset_amount: 0,
+                remaining_debt_amount: 0,
+                refund_amount: 0,
+            });
+        }
+
+        document.addEventListener('click', function (event) {
+            var btn = event.target.closest('[data-refund-deposit-btn]');
+            if (!btn || btn.disabled) {
+                return;
+            }
+
+            form.action = btn.getAttribute('data-action') || '';
+            resetSettlementPreview();
+            amountInput.value = '0.00';
+
+            var previewUrl = btn.getAttribute('data-preview-url');
+            if (!previewUrl) {
+                return;
+            }
+
+            fetch(previewUrl, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+            }).then(function (response) {
+                if (!response.ok) {
+                    throw new Error('Unable to load settlement preview.');
                 }
-                form.action = btn.getAttribute('data-action');
-                var amount = btn.getAttribute('data-amount') || '0';
-                amountInput.value = parseFloat(amount).toFixed(2);
-                var isRefundDue = parseFloat(amount) > 0;
-                paymentFields.classList.toggle('d-none', !isRefundDue);
-                methodSelect.required = isRefundDue;
-                if (!isRefundDue) {
-                    methodSelect.value = '';
-                }
-                [
-                    ['refundGrossDeposit', 'data-gross-deposit'],
-                    ['refundDeductions', 'data-deductions'],
-                    ['refundOutstanding', 'data-driver-outstanding'],
-                    ['refundDebtOffset', 'data-debt-offset'],
-                    ['refundRemainingDebt', 'data-remaining-debt'],
-                    ['refundFinalAmount', 'data-amount']
-                ].forEach(function (item) {
-                    var element = document.getElementById(item[0]);
-                    var value = parseFloat(btn.getAttribute(item[1]) || '0');
-                    element.textContent = '£' + value.toFixed(2);
-                });
-                toggleBankAccount();
+                return response.json();
+            }).then(function (preview) {
+                applySettlementPreview(preview);
+            }).catch(function () {
+                alert('Unable to load deposit settlement preview. Please try again.');
             });
         });
     });

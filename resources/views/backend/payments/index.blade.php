@@ -41,132 +41,7 @@
                                         <th>Actions</th>
                                     </tr>
                                     </thead>
-                                    <tbody>
-                                    @forelse($drivers as $driver)
-                                        @php
-                                            $lastPaymentIso = $driver->last_posted_payment_date
-                                                ? \Carbon\Carbon::parse($driver->last_posted_payment_date)->format('Y-m-d')
-                                                : '';
-                                            $latestInvoiceIso = $driver->latest_invoice_date
-                                                ? \Carbon\Carbon::parse($driver->latest_invoice_date)->format('Y-m-d')
-                                                : '';
-                                            $remindAtIso = $driver->payment_remind_at?->toIso8601String() ?? '';
-                                            $pendingDfsAmount = (float) ($driver->pending_dfs_amount ?? 0);
-                                            $totalPaidPosted = (float) ($driver->total_paid ?? 0);
-                                            $dfsExportStatus = $pendingDfsAmount > 0
-                                                ? 'pending'
-                                                : ($totalPaidPosted > 0 ? 'posted' : '');
-                                        @endphp
-                                        <tr
-                                            data-dfs-export-status="{{ $dfsExportStatus }}"
-                                            data-driver-status="{{ $driver->is_active ? 'active' : 'inactive' }}"
-                                            data-remind-at="{{ $remindAtIso }}"
-                                            data-last-payment-date="{{ $lastPaymentIso }}"
-                                            data-latest-invoice-date="{{ $latestInvoiceIso }}"
-                                        >
-                                            <td>
-                                                <strong>{{ $driver->selectOptionLabel() ?: 'N/A' }}</strong>
-                                                @if($payingCompany = $driver->primaryPayingCompanyName())
-                                                    <br>
-                                                    <span class="paying-company-subtitle d-block">Pays via: {{ $payingCompany }}</span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @php
-                                                    $registrations = $driver->agreements
-                                                        ->flatMap(fn ($agreement) => $agreement->vehicleRegistrationsIncludingReplacements())
-                                                        ->unique()
-                                                        ->values();
-                                                @endphp
-                                                {{ $registrations->isNotEmpty() ? $registrations->implode(', ') : '—' }}
-                                            </td>
-                                            <td>
-                                                @php
-                                                    $payToBank = $driver->agreements
-                                                        ->map(fn ($agreement) => $agreement->paymentBankAccount?->paymentDisplayName())
-                                                        ->filter()
-                                                        ->unique()
-                                                        ->values();
-                                                @endphp
-                                                {{ $payToBank->isNotEmpty() ? $payToBank->implode(', ') : '—' }}
-                                            </td>
-                                            <td>{{ $driver->phone_number ?? 'N/A' }}</td>
-                                            <td>{{ $driver->invoices_count }}</td>
-                                            <td>{{ $driver->payments_count }}</td>
-                                            <td>
-                                                {{ $latestInvoiceIso ? \Carbon\Carbon::parse($latestInvoiceIso)->format('d M Y') : '—' }}
-                                            </td>
-                                            <td>
-                                                {{ $lastPaymentIso ? \Carbon\Carbon::parse($lastPaymentIso)->format('d M Y') : '—' }}
-                                            </td>
-                                            <td>
-                                                @php
-                                                    $hasPendingDfs = $driver->total_due > 0 && $pendingDfsAmount > 0;
-                                                    $totalDueClass = $driver->total_due > 0
-                                                        ? ($hasPendingDfs ? 'text-warning' : 'text-danger')
-                                                        : 'text-muted';
-                                                    $pendingDfsTooltip = $hasPendingDfs
-                                                        ? '£'.number_format($pendingDfsAmount, 2).' pending daily financial sheet approval.'
-                                                        : null;
-                                                @endphp
-                                                <strong class="{{ $totalDueClass }}{{ $hasPendingDfs ? ' js-dfs-pending-amount' : '' }}"
-                                                    @if($pendingDfsTooltip)
-                                                        data-toggle="tooltip"
-                                                        data-placement="top"
-                                                        title="{{ $pendingDfsTooltip }}"
-                                                    @endif
-                                                >
-                                                    £{{ number_format($driver->total_due, 2) }}
-                                                </strong>
-                                            </td>
-                                            <td>
-                                                <strong class="{{ $driver->credit_amount > 0 ? 'text-success' : 'text-muted' }}">
-                                                    £{{ number_format($driver->credit_amount, 2) }}
-                                                </strong>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group" role="group">
-                                                    <a href="{{ route('payments.driver', $driver) }}"
-                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
-                                                       data-toggle="tooltip" data-placement="top"
-                                                       title="View Driver Payments" aria-label="View Driver Payments">
-                                                        <i class="fa fa-eye"></i>
-                                                    </a>
-                                                    <a href="{{ route('payments.create', ['driver_id' => $driver->id]) }}"
-                                                       class="btn btn-sm btn-outline-primary js-action-tooltip"
-                                                       data-toggle="tooltip" data-placement="top"
-                                                       title="Add Payment" aria-label="Add Payment">
-                                                        <i class="fa fa-plus"></i>
-                                                    </a>
-                                                    @php
-                                                        $hasFollowUp = $driver->hasPaymentFollowUpNote() || $driver->hasPaymentReminder();
-                                                        $followUpBtnClass = $hasFollowUp ? 'btn-warning' : 'btn-outline-secondary';
-                                                    @endphp
-                                                    <button type="button"
-                                                            class="btn btn-sm {{ $followUpBtnClass }} js-action-tooltip js-driver-follow-up"
-                                                            data-toggle="tooltip" data-placement="top"
-                                                            title="Notes/Reminder"
-                                                            aria-label="Notes/Reminder"
-                                                            data-driver-id="{{ $driver->id }}"
-                                                            data-driver-name="{{ $driver->selectOptionLabel() ?: trim($driver->first_name.' '.$driver->last_name) }}"
-                                                            data-notes="{{ $driver->payment_follow_up_notes ?? '' }}"
-                                                            data-remind-at="{{ $driver->payment_remind_at?->toIso8601String() ?? '' }}"
-                                                            data-update-url="{{ route('payments.follow-up.update', $driver) }}">
-                                                        <i class="fa fa-sticky-note"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="10" class="text-center text-muted py-4">
-                                                <i class="fa fa-user fa-3x mb-3"></i>
-                                                <br>
-                                                No drivers found.
-                                            </td>
-                                        </tr>
-                                    @endforelse
-                                    </tbody>
+                                    <tbody></tbody>
                                 </table>
                             </div>
                         </div>
@@ -386,17 +261,6 @@
                 $('.js-dfs-pending-amount[data-toggle="tooltip"]').tooltip({ container: 'body' });
             }
 
-            const dataTable = $('#dataTable').DataTable({
-                processing: true,
-                responsive: true,
-            });
-
-            initializeActionTooltips();
-            dataTable.on('draw.dt responsive-display.dt', function () {
-                $('.tooltip').remove();
-                initializeActionTooltips();
-            });
-
             const advancedFilters = {
                 driverStatus: '',
                 reminderFrom: '',
@@ -406,6 +270,63 @@
                 latestInvoiceFrom: '',
                 latestInvoiceTo: '',
             };
+
+            function syncFiltersFromForm() {
+                advancedFilters.driverStatus = $('#paymentsFilterStatus').val() || '';
+                advancedFilters.reminderFrom = $('#paymentsReminderFrom').val() || '';
+                advancedFilters.reminderTo = $('#paymentsReminderTo').val() || '';
+                advancedFilters.lastPaymentFrom = $('#paymentsLastPaymentFrom').val() || '';
+                advancedFilters.lastPaymentTo = $('#paymentsLastPaymentTo').val() || '';
+                advancedFilters.latestInvoiceFrom = $('#paymentsLatestInvoiceFrom').val() || '';
+                advancedFilters.latestInvoiceTo = $('#paymentsLatestInvoiceTo').val() || '';
+            }
+
+            function filterAjaxParams() {
+                syncFiltersFromForm();
+
+                return {
+                    filter_driver_status: advancedFilters.driverStatus,
+                    filter_reminder_from: advancedFilters.reminderFrom,
+                    filter_reminder_to: advancedFilters.reminderTo,
+                    filter_last_payment_from: advancedFilters.lastPaymentFrom,
+                    filter_last_payment_to: advancedFilters.lastPaymentTo,
+                    filter_latest_invoice_from: advancedFilters.latestInvoiceFrom,
+                    filter_latest_invoice_to: advancedFilters.latestInvoiceTo,
+                };
+            }
+
+            const dataTable = $('#dataTable').DataTable({
+                processing: true,
+                serverSide: true,
+                deferRender: true,
+                pageLength: 25,
+                responsive: true,
+                ajax: {
+                    url: '{{ route('payments.index') }}',
+                    data: function (params) {
+                        return Object.assign(params, filterAjaxParams());
+                    },
+                },
+                columns: [
+                    { data: 'driver', name: 'driver', orderable: false, searchable: false },
+                    { data: 'vehicle', name: 'vehicle', orderable: false, searchable: false },
+                    { data: 'pay_to', name: 'pay_to', orderable: false, searchable: false },
+                    { data: 'phone', name: 'phone' },
+                    { data: 'invoices_count', name: 'invoices_count', searchable: false },
+                    { data: 'payments_count', name: 'payments_count', searchable: false },
+                    { data: 'payment_due', name: 'payment_due', orderable: false, searchable: false },
+                    { data: 'last_payment', name: 'last_payment', orderable: false, searchable: false },
+                    { data: 'total_due_html', name: 'total_due_html', orderable: false, searchable: false },
+                    { data: 'credit_html', name: 'credit_html', orderable: false, searchable: false },
+                    { data: 'actions_html', name: 'actions_html', orderable: false, searchable: false },
+                ],
+            });
+
+            initializeActionTooltips();
+            dataTable.on('draw.dt responsive-display.dt', function () {
+                $('.tooltip').remove();
+                initializeActionTooltips();
+            });
 
             const $filter = $('#dataTable_filter');
             const $toolbar = $('#paymentsTableToolbar');
@@ -432,124 +353,6 @@
                 return isNaN(date.getTime()) ? null : date;
             }
 
-            function dateInRange(iso, fromStr, toStr) {
-                if (!iso) {
-                    return false;
-                }
-                const date = parseDateYmd(iso);
-                if (!date) {
-                    return false;
-                }
-                const from = parseDateYmd(fromStr);
-                const to = parseDateYmd(toStr);
-                if (from && date < from) {
-                    return false;
-                }
-                if (to && date > to) {
-                    return false;
-                }
-                return true;
-            }
-
-            function datetimeInRange(iso, fromLocal, toLocal) {
-                if (!iso) {
-                    return false;
-                }
-                const value = new Date(iso);
-                if (isNaN(value.getTime())) {
-                    return false;
-                }
-                if (fromLocal) {
-                    const from = new Date(fromLocal);
-                    if (!isNaN(from.getTime()) && value < from) {
-                        return false;
-                    }
-                }
-                if (toLocal) {
-                    const to = new Date(toLocal);
-                    if (!isNaN(to.getTime()) && value > to) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            function passesReminderFilter(row) {
-                if (!advancedFilters.reminderFrom && !advancedFilters.reminderTo) {
-                    return true;
-                }
-
-                return datetimeInRange(
-                    row.dataset.remindAt || '',
-                    advancedFilters.reminderFrom,
-                    advancedFilters.reminderTo
-                );
-            }
-
-            function passesLastPaymentFilter(row) {
-                if (!advancedFilters.lastPaymentFrom && !advancedFilters.lastPaymentTo) {
-                    return true;
-                }
-
-                return dateInRange(
-                    row.dataset.lastPaymentDate || '',
-                    advancedFilters.lastPaymentFrom,
-                    advancedFilters.lastPaymentTo
-                );
-            }
-
-            function passesLatestInvoiceFilter(row) {
-                if (!advancedFilters.latestInvoiceFrom && !advancedFilters.latestInvoiceTo) {
-                    return true;
-                }
-
-                return dateInRange(
-                    row.dataset.latestInvoiceDate || '',
-                    advancedFilters.latestInvoiceFrom,
-                    advancedFilters.latestInvoiceTo
-                );
-            }
-
-            function syncFiltersFromForm() {
-                advancedFilters.driverStatus = $('#paymentsFilterStatus').val() || '';
-                advancedFilters.reminderFrom = $('#paymentsReminderFrom').val() || '';
-                advancedFilters.reminderTo = $('#paymentsReminderTo').val() || '';
-                advancedFilters.lastPaymentFrom = $('#paymentsLastPaymentFrom').val() || '';
-                advancedFilters.lastPaymentTo = $('#paymentsLastPaymentTo').val() || '';
-                advancedFilters.latestInvoiceFrom = $('#paymentsLatestInvoiceFrom').val() || '';
-                advancedFilters.latestInvoiceTo = $('#paymentsLatestInvoiceTo').val() || '';
-            }
-
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-                if (settings.nTable.id !== 'dataTable') {
-                    return true;
-                }
-
-                const row = dataTable.row(dataIndex).node();
-                if (!row) {
-                    return true;
-                }
-
-                if (advancedFilters.driverStatus
-                    && row.dataset.driverStatus !== advancedFilters.driverStatus) {
-                    return false;
-                }
-
-                if (!passesReminderFilter(row)) {
-                    return false;
-                }
-
-                if (!passesLastPaymentFilter(row)) {
-                    return false;
-                }
-
-                if (!passesLatestInvoiceFilter(row)) {
-                    return false;
-                }
-
-                return true;
-            });
-
             function setFilterPanelOpen(isOpen) {
                 $('#paymentsFilterPanel').toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
                 $('#paymentsFilterBackdrop').toggleClass('is-open', isOpen);
@@ -564,20 +367,17 @@
             });
 
             $('.payments-advanced-filter').on('change', function () {
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
 
             $('.payments-date-filter, .payments-datetime-filter').on('change input', function () {
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
 
             $('#paymentsFilterReset').on('click', function () {
                 $('#paymentsFilterStatus').val('');
                 $('#paymentsReminderFrom, #paymentsReminderTo, #paymentsLastPaymentFrom, #paymentsLastPaymentTo, #paymentsLatestInvoiceFrom, #paymentsLatestInvoiceTo').val('');
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
 
             function formatDisplayDate(iso) {
@@ -714,31 +514,32 @@
                 URL.revokeObjectURL(url);
             }
 
-            function collectPaymentsExportRows() {
-                const rows = [];
-                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
-                    const node = this.node();
-                    if (!node) {
-                        return;
-                    }
-
-                    const cells = node.querySelectorAll('td');
-                    if (cells.length < 10) {
-                        return;
-                    }
-
-                    const row = [];
-                    for (let i = 0; i < 10; i++) {
-                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
-                    }
-
-                    rows.push({
-                        dfsStatus: node.getAttribute('data-dfs-export-status') || '',
-                        cells: row,
-                    });
+            function fetchPaymentsExportRows(callback) {
+                const params = Object.assign(filterAjaxParams(), {
+                    export: 1,
+                    search: (dataTable.search() || '').trim(),
                 });
 
-                return rows;
+                $.ajax({
+                    url: '{{ route('payments.index') }}',
+                    method: 'GET',
+                    data: params,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                }).done(function (response) {
+                    const rows = (response.rows || []).map(function (cells, index) {
+                        return {
+                            dfsStatus: (response.dfs_statuses || [])[index] || '',
+                            cells: cells,
+                        };
+                    });
+                    callback(rows);
+                }).fail(function () {
+                    alert('Unable to export driver payments. Please try again.');
+                    callback([]);
+                });
             }
 
             function paymentsPdfRowFillColor(dfsStatus) {
@@ -799,146 +600,148 @@
 
             function exportPaymentsCsv() {
                 const exportMeta = buildPaymentsExportMeta();
-                const bodyRows = collectPaymentsExportRows();
                 const exportHeaders = getPaymentsExportHeaders();
 
-                if (bodyRows.length === 0) {
-                    alert('No records to export. Adjust your search or filters and try again.');
-                    return;
-                }
+                fetchPaymentsExportRows(function (bodyRows) {
+                    if (bodyRows.length === 0) {
+                        alert('No records to export. Adjust your search or filters and try again.');
+                        return;
+                    }
 
-                const lines = [csvEscape(exportMeta.title)];
-                exportMeta.lines.forEach(function (line) {
-                    lines.push(csvEscape(line));
-                });
-                lines.push('');
-                lines.push(exportHeaders.map(csvEscape).join(','));
-                bodyRows.forEach(function (entry) {
-                    lines.push(entry.cells.map(csvEscape).join(','));
-                });
+                    const lines = [csvEscape(exportMeta.title)];
+                    exportMeta.lines.forEach(function (line) {
+                        lines.push(csvEscape(line));
+                    });
+                    lines.push('');
+                    lines.push(exportHeaders.map(csvEscape).join(','));
+                    bodyRows.forEach(function (entry) {
+                        lines.push(entry.cells.map(csvEscape).join(','));
+                    });
 
-                downloadCsv(paymentsExportFilename('.csv'), lines);
+                    downloadCsv(paymentsExportFilename('.csv'), lines);
+                });
             }
 
             function exportPaymentsPdf() {
                 const exportMeta = buildPaymentsExportMeta();
-                const bodyRows = collectPaymentsExportRows();
                 const exportHeaders = getPaymentsExportHeaders();
-
-                if (bodyRows.length === 0) {
-                    alert('No records to export. Adjust your search or filters and try again.');
-                    return;
-                }
 
                 if (typeof pdfMake === 'undefined') {
                     alert('PDF export is not available. Please refresh the page and try again.');
                     return;
                 }
 
-                const tableBody = [
-                    getPaymentsExportHeaders().map(function (header, columnIndex) {
-                        return {
-                            text: header,
-                            style: columnIndex >= 4 ? 'tableHeaderNumeric' : 'tableHeader',
-                            noWrap: false,
-                        };
-                    }),
-                ];
-
-                const hasPendingRows = bodyRows.some(function (entry) {
-                    return entry.dfsStatus === 'pending';
-                });
-                const hasPostedRows = bodyRows.some(function (entry) {
-                    return entry.dfsStatus === 'posted';
-                });
-
-                bodyRows.forEach(function (entry) {
-                    const fillColor = paymentsPdfRowFillColor(entry.dfsStatus);
-                    tableBody.push(entry.cells.map(function (cell, columnIndex) {
-                        return buildPaymentsPdfTableCell(cell, columnIndex, fillColor);
-                    }));
-                });
-
-                const content = [
-                    {
-                        text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
-                        style: 'title',
-                        margin: [0, 0, 0, 4],
-                    },
-                    ...exportMeta.lines.map(function (line) {
-                        return {
-                            text: line,
-                            style: 'subtitle',
-                            margin: [0, 0, 0, 2],
-                        };
-                    }),
-                ];
-
-                if (hasPendingRows || hasPostedRows) {
-                    if (hasPendingRows) {
-                        content.push({
-                            text: 'Light yellow rows: payment recorded, pending daily financial sheet approval.',
-                            style: 'subtitle',
-                            margin: [0, 0, 0, 2],
-                        });
+                fetchPaymentsExportRows(function (bodyRows) {
+                    if (bodyRows.length === 0) {
+                        alert('No records to export. Adjust your search or filters and try again.');
+                        return;
                     }
-                    if (hasPostedRows) {
-                        content.push({
-                            text: 'Light green rows: payments approved in daily financial sheet.',
-                            style: 'subtitle',
-                            margin: [0, 0, 0, 2],
-                        });
+
+                    const tableBody = [
+                        getPaymentsExportHeaders().map(function (header, columnIndex) {
+                            return {
+                                text: header,
+                                style: columnIndex >= 4 ? 'tableHeaderNumeric' : 'tableHeader',
+                                noWrap: false,
+                            };
+                        }),
+                    ];
+
+                    const hasPendingRows = bodyRows.some(function (entry) {
+                        return entry.dfsStatus === 'pending';
+                    });
+                    const hasPostedRows = bodyRows.some(function (entry) {
+                        return entry.dfsStatus === 'posted';
+                    });
+
+                    bodyRows.forEach(function (entry) {
+                        const fillColor = paymentsPdfRowFillColor(entry.dfsStatus);
+                        tableBody.push(entry.cells.map(function (cell, columnIndex) {
+                            return buildPaymentsPdfTableCell(cell, columnIndex, fillColor);
+                        }));
+                    });
+
+                    const content = [
+                        {
+                            text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                            style: 'title',
+                            margin: [0, 0, 0, 4],
+                        },
+                        ...exportMeta.lines.map(function (line) {
+                            return {
+                                text: line,
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2],
+                            };
+                        }),
+                    ];
+
+                    if (hasPendingRows || hasPostedRows) {
+                        if (hasPendingRows) {
+                            content.push({
+                                text: 'Light yellow rows: payment recorded, pending daily financial sheet approval.',
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2],
+                            });
+                        }
+                        if (hasPostedRows) {
+                            content.push({
+                                text: 'Light green rows: payments approved in daily financial sheet.',
+                                style: 'subtitle',
+                                margin: [0, 0, 0, 2],
+                            });
+                        }
                     }
-                }
 
-                content.push({
-                    text: '',
-                    margin: [0, 0, 0, 8],
+                    content.push({
+                        text: '',
+                        margin: [0, 0, 0, 8],
+                    });
+                    content.push({
+                        table: {
+                            headerRows: 1,
+                            widths: getPaymentsPdfColumnWidths(),
+                            body: tableBody,
+                        },
+                        layout: {
+                            hLineWidth: function () { return 0.5; },
+                            vLineWidth: function () { return 0; },
+                            hLineColor: function () { return '#dfe3e8'; },
+                            paddingLeft: function () { return getPaymentsPdfCellPadding().left; },
+                            paddingRight: function () { return getPaymentsPdfCellPadding().right; },
+                            paddingTop: function () { return getPaymentsPdfCellPadding().top; },
+                            paddingBottom: function () { return getPaymentsPdfCellPadding().bottom; },
+                        },
+                        width: getPaymentsPdfTableWidth(),
+                    });
+
+                    const doc = {
+                        pageSize: 'A4',
+                        pageOrientation: 'landscape',
+                        pageMargins: [16, 40, 16, 28],
+                        content: content,
+                        styles: {
+                            title: { fontSize: 14, bold: true },
+                            subtitle: { fontSize: 9, color: '#5e5873' },
+                            tableHeader: { fontSize: 9, bold: true, fillColor: '#f3f2f7' },
+                            tableHeaderNumeric: { fontSize: 9, bold: true, fillColor: '#f3f2f7', alignment: 'right' },
+                            tableCell: { fontSize: 8, lineHeight: 1.25 },
+                            tableCellNumeric: { fontSize: 8, lineHeight: 1.25, alignment: 'right' },
+                        },
+                        defaultStyle: { fontSize: 8 },
+                        footer: function (currentPage, pageCount) {
+                            return {
+                                text: 'Page ' + currentPage + ' of ' + pageCount,
+                                alignment: 'center',
+                                fontSize: 8,
+                                color: '#5e5873',
+                                margin: [0, 8, 0, 0],
+                            };
+                        },
+                    };
+
+                    pdfMake.createPdf(doc).download(paymentsExportFilename('.pdf'));
                 });
-                content.push({
-                    table: {
-                        headerRows: 1,
-                        widths: getPaymentsPdfColumnWidths(),
-                        body: tableBody,
-                    },
-                    layout: {
-                        hLineWidth: function () { return 0.5; },
-                        vLineWidth: function () { return 0; },
-                        hLineColor: function () { return '#dfe3e8'; },
-                        paddingLeft: function () { return getPaymentsPdfCellPadding().left; },
-                        paddingRight: function () { return getPaymentsPdfCellPadding().right; },
-                        paddingTop: function () { return getPaymentsPdfCellPadding().top; },
-                        paddingBottom: function () { return getPaymentsPdfCellPadding().bottom; },
-                    },
-                    width: getPaymentsPdfTableWidth(),
-                });
-
-                const doc = {
-                    pageSize: 'A4',
-                    pageOrientation: 'landscape',
-                    pageMargins: [16, 40, 16, 28],
-                    content: content,
-                    styles: {
-                        title: { fontSize: 14, bold: true },
-                        subtitle: { fontSize: 9, color: '#5e5873' },
-                        tableHeader: { fontSize: 9, bold: true, fillColor: '#f3f2f7' },
-                        tableHeaderNumeric: { fontSize: 9, bold: true, fillColor: '#f3f2f7', alignment: 'right' },
-                        tableCell: { fontSize: 8, lineHeight: 1.25 },
-                        tableCellNumeric: { fontSize: 8, lineHeight: 1.25, alignment: 'right' },
-                    },
-                    defaultStyle: { fontSize: 8 },
-                    footer: function (currentPage, pageCount) {
-                        return {
-                            text: 'Page ' + currentPage + ' of ' + pageCount,
-                            alignment: 'center',
-                            fontSize: 8,
-                            color: '#5e5873',
-                            margin: [0, 8, 0, 0],
-                        };
-                    },
-                };
-
-                pdfMake.createPdf(doc).download(paymentsExportFilename('.pdf'));
             }
 
             $('#paymentsExportCsv').on('click', exportPaymentsCsv);

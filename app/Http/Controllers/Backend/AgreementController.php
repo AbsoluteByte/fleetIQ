@@ -17,6 +17,7 @@ use App\Models\Status;
 use App\Models\Tenant;
 use App\Services\AgreementClientDocumentsService;
 use App\Services\AgreementDepositSettlementService;
+use App\Services\AgreementIndexService;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementPdfService;
 use App\Services\AgreementUpgradeService;
@@ -57,7 +58,7 @@ class AgreementController extends Controller
         view()->share('plural', Str::plural($this->name));
     }
 
-    public function index()
+    public function index(Request $request, AgreementIndexService $indexService)
     {
         $tenant = Auth::user()->currentTenant();
 
@@ -65,19 +66,128 @@ class AgreementController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', 'No active company found! Please contact administrator.');
         }
-        $agreements = Agreement::where('tenant_id', $tenant->id)->with(['company', 'driver', 'car', 'status', 'parentAgreement', 'depositRefund', 'deductions', 'upgradedToAgreement', 'renewedToAgreement'])
-            ->withCount(['collections', 'pendingCollections', 'overdueCollections'])
-            ->get();
-        $settlementService = app(AgreementDepositSettlementService::class);
-        $agreements->each(function (Agreement $agreement) use ($settlementService) {
-            if ($agreement->canRequestDepositRefund()) {
-                $agreement->setAttribute('deposit_settlement_preview', $settlementService->preview($agreement));
+
+        if ($request->ajax()) {
+            if ($request->boolean('export')) {
+                return $this->agreementsExport($request, $indexService);
             }
-        });
+
+            return $this->agreementsDataTable($request, $indexService);
+        }
 
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
+        $filterStatuses = $indexService->filterStatusNames($tenant->id);
 
-        return view($this->dir.'index', compact('agreements', 'bankAccounts'));
+        return view($this->dir.'index', compact('bankAccounts', 'filterStatuses'));
+    }
+
+    public function depositSettlementPreview(
+        Agreement $agreement,
+        AgreementDepositSettlementService $settlementService
+    ) {
+        $tenant = Auth::user()->currentTenant();
+
+        if (! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access to this agreement');
+        }
+
+        if (! $agreement->canRequestDepositRefund()) {
+            abort(422, 'This agreement is not eligible for a deposit settlement preview.');
+        }
+
+        $agreement->load('deductions');
+
+        return response()->json($settlementService->preview($agreement));
+    }
+
+    private function agreementsDataTable(Request $request, AgreementIndexService $indexService)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $upgradeService = app(AgreementUpgradeService::class);
+
+        $query = $indexService->baseQuery($tenant->id);
+        $indexService->applyFilters($query, $request);
+
+        $rowCache = [];
+        $rowFor = function (Agreement $agreement) use ($indexService, $upgradeService, &$rowCache): array {
+            return $rowCache[$agreement->id] ??= $indexService->rowPayload($agreement, $upgradeService);
+        };
+
+        return datatables()->eloquent($query)
+            ->addColumn('company', fn (Agreement $agreement) => $agreement->company?->name ?? '—')
+            ->addColumn('driver', fn (Agreement $agreement) => $rowFor($agreement)['driver'])
+            ->addColumn('car', fn (Agreement $agreement) => $agreement->car?->registration ?? '—')
+            ->addColumn('start_date', fn (Agreement $agreement) => optional($agreement->start_date)->format('M d, Y') ?: '—')
+            ->addColumn('end_date', fn (Agreement $agreement) => optional($agreement->end_date)->format('M d, Y') ?: '—')
+            ->addColumn('notice_date', fn (Agreement $agreement) => $agreement->termination_notice_date ? $agreement->termination_notice_date->format('M d, Y') : '—')
+            ->addColumn('closing_date', fn (Agreement $agreement) => $agreement->closing_date ? $agreement->closing_date->format('M d, Y') : '—')
+            ->addColumn('rent', fn (Agreement $agreement) => $agreement->isReplacementVehicle()
+                ? 'Replacement'
+                : '£'.number_format((float) $agreement->agreed_rent, 2))
+            ->addColumn('esign_html', fn (Agreement $agreement) => $rowFor($agreement)['esign_html'])
+            ->addColumn('status_html', fn (Agreement $agreement) => $rowFor($agreement)['status_html'])
+            ->addColumn('actions_html', fn (Agreement $agreement) => $rowFor($agreement)['actions_html'])
+            ->filter(function ($query) use ($request) {
+                $keyword = trim((string) data_get($request->input('search'), 'value', ''));
+                if ($keyword === '') {
+                    return;
+                }
+
+                $query->where(function ($inner) use ($keyword) {
+                    $inner->whereHas('company', fn ($company) => $company->where('name', 'like', "%{$keyword}%"))
+                        ->orWhereHas('driver', fn ($driver) => $driver
+                            ->where('first_name', 'like', "%{$keyword}%")
+                            ->orWhere('last_name', 'like', "%{$keyword}%")
+                            ->orWhere('post_code', 'like', "%{$keyword}%"))
+                        ->orWhereHas('car', fn ($car) => $car->where('registration', 'like', "%{$keyword}%"))
+                        ->orWhere('paying_company_name', 'like', "%{$keyword}%");
+                });
+            })
+            ->orderColumn('company', fn ($query, $order) => $query->orderBy(
+                Company::select('name')->whereColumn('companies.id', 'agreements.company_id'),
+                $order
+            ))
+            ->rawColumns(['driver', 'esign_html', 'status_html', 'actions_html'])
+            ->toJson();
+    }
+
+    private function agreementsExport(Request $request, AgreementIndexService $indexService)
+    {
+        $tenant = Auth::user()->currentTenant();
+        $upgradeService = app(AgreementUpgradeService::class);
+
+        $query = $indexService->baseQuery($tenant->id);
+        $indexService->applyFilters($query, $request);
+
+        $keyword = trim((string) $request->input('search'));
+        if ($keyword !== '') {
+            $query->where(function ($inner) use ($keyword) {
+                $inner->whereHas('company', fn ($company) => $company->where('name', 'like', "%{$keyword}%"))
+                    ->orWhereHas('driver', fn ($driver) => $driver
+                        ->where('first_name', 'like', "%{$keyword}%")
+                        ->orWhere('last_name', 'like', "%{$keyword}%")
+                        ->orWhere('post_code', 'like', "%{$keyword}%"))
+                    ->orWhereHas('car', fn ($car) => $car->where('registration', 'like', "%{$keyword}%"))
+                    ->orWhere('paying_company_name', 'like', "%{$keyword}%");
+            });
+        }
+
+        $rows = $indexService->rowsForExport($query->get(), $upgradeService);
+
+        return response()->json([
+            'rows' => array_map(fn (array $row) => [
+                $row['company'],
+                strip_tags(str_replace('<br>', ' ', $row['driver'])),
+                $row['car'],
+                $row['start_date'],
+                $row['end_date'],
+                $row['notice_date'],
+                $row['closing_date'],
+                $row['rent'],
+                $row['export_esign'],
+                $row['export_status'],
+            ], $rows),
+        ]);
     }
 
     public function create(Request $request)

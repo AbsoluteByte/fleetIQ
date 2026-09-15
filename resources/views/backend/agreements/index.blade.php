@@ -1,7 +1,7 @@
 @extends('layouts.admin', ['title' => 'Agreements'])
 @section('content')
     @php
-        $filterStatuses = $agreements->map(fn ($a) => optional($a->status)->name)->filter()->unique()->sort()->values();
+        $filterStatuses = $filterStatuses ?? [];
     @endphp
     <section id="basic-datatable">
         <div class="row">
@@ -44,201 +44,7 @@
                                         <th>Actions</th>
                                     </tr>
                                     </thead>
-                                    <tbody>
-                                    @forelse($agreements as $agreement)
-                                        @php
-                                            $startIso = optional($agreement->start_date)->format('Y-m-d') ?? '';
-                                            $endIso = optional($agreement->end_date)->format('Y-m-d') ?? '';
-                                            $closingIso = optional($agreement->closing_date)->format('Y-m-d') ?? '';
-                                            $statusName = (string) optional($agreement->status)->name;
-                                            $noticeIso = (in_array(strtolower($statusName), ['active', 'swap'], true) && $agreement->termination_notice_date)
-                                                ? $agreement->termination_notice_date->format('Y-m-d')
-                                                : '';
-                                            $closedOnIso = optional($agreement->effectiveCloseDate())->format('Y-m-d') ?? '';
-                                            $isBillableForNotice = in_array(strtolower($statusName), ['active', 'swap'], true) ? '1' : '0';
-                                            // Filter labels match the action button:
-                                            // refunded = refund already recorded (grey button)
-                                            // pending  = eligible to refund, not recorded yet (green button)
-                                            $filterRefundStatus = $agreement->depositRefund
-                                                ? 'refunded'
-                                                : (
-                                                    $agreement->isClosedForDepositRefund()
-                                                    && (float) $agreement->deposit_amount > 0
-                                                        ? 'pending'
-                                                        : ''
-                                                );
-                                        @endphp
-                                        <tr
-                                            data-start-date="{{ $startIso }}"
-                                            data-end-date="{{ $endIso }}"
-                                            data-closing-date="{{ $closingIso }}"
-                                            data-notice-date="{{ $noticeIso }}"
-                                            data-is-billable="{{ $isBillableForNotice }}"
-                                            data-closed-on="{{ $closedOnIso }}"
-                                            data-status="{{ $statusName }}"
-                                            data-refund-status="{{ $filterRefundStatus }}"
-                                        >
-                                            <td>{{ $agreement->company->name  }}</td>
-                                            <td>
-                                                <strong>{{ $agreement->driver->full_name }}</strong>
-                                                @if($agreement->paying_company_name)
-                                                    <br>
-                                                    <span class="text-muted">Pays via: {{ $agreement->paying_company_name }}</span>
-                                                @endif
-                                                <br>
-                                                <span>Post Code: {{ $agreement->driver->post_code }}</span>
-                                            </td>
-                                            <td>{{ $agreement->car->registration }}</td>
-                                            <td>{{ $agreement->start_date->format('M d, Y') }}</td>
-                                            <td>{{ $agreement->end_date->format('M d, Y') }}</td>
-                                            <td>{{ $agreement->termination_notice_date ? $agreement->termination_notice_date->format('M d, Y') : '—' }}</td>
-                                            <td>{{ $agreement->closing_date ? $agreement->closing_date->format('M d, Y') : '—' }}</td>
-                                            <td>
-                                                @if($agreement->isReplacementVehicle())
-                                                    <span class="text-muted">Replacement</span>
-                                                @else
-                                                    £{{ number_format($agreement->agreed_rent, 2) }}
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if($agreement->hellosign_status)
-                                                    <span class="badge {{ $agreement->esign_status_badge }}">
-                                                        {{ ucfirst($agreement->hellosign_status) }}
-                                                    </span>
-                                                    @if($agreement->hellosign_status === 'signed' && $agreement->esign_document_path)
-                                                        <br>
-                                                        <a href="{{ route('agreements.view-signed', ['agreement' => $agreement, 'download' => 1]) }}"
-                                                           class="btn btn-sm btn-success mt-1"
-                                                           title="Download Signed Document">
-                                                            <i class="fa fa-download"></i>
-                                                        </a>
-                                                    @endif
-                                                @else
-                                                    <span class="badge bg-light text-dark">Not Sent</span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                <span class="badge"
-                                                      style="background-color: {{ $agreement->status->color }}">
-                                                    {{ $agreement->status->name }}
-                                                </span>
-                                                @if($agreement->isReplacementVehicle() && $agreement->parentAgreement)
-                                                    <br>
-                                                    <small class="text-muted">
-                                                        Original:
-                                                        <a href="{{ route('agreements.show', $agreement->parentAgreement) }}">
-                                                            #{{ $agreement->parentAgreement->id }}
-                                                        </a>
-                                                    </small>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                <div class="btn-group" role="group">
-                                                    <a href="{{ route('agreements.show', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-info js-action-tooltip"
-                                                       data-toggle="tooltip" data-placement="top"
-                                                       title="View Agreement" aria-label="View Agreement">
-                                                        <i class="fa fa-eye"></i>
-                                                    </a>
-                                                    <a href="{{ route('agreements.edit', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-warning js-action-tooltip"
-                                                       data-toggle="tooltip" data-placement="top"
-                                                       title="Edit Agreement" aria-label="Edit Agreement">
-                                                        <i class="fa fa-edit"></i>
-                                                    </a>
-                                                    @if(app(\App\Services\AgreementUpgradeService::class)->canRenew($agreement))
-                                                        <a href="{{ route('agreements.renew', $agreement) }}"
-                                                           class="btn btn-sm btn-outline-primary js-action-tooltip"
-                                                           data-toggle="tooltip" data-placement="top"
-                                                           title="Renew Agreement" aria-label="Renew Agreement">
-                                                            <i class="fa fa-refresh"></i>
-                                                        </a>
-                                                    @endif
-                                                    @php
-                                                        $refundStatus = $agreement->depositRefundStatus();
-                                                        $showRefundBtn = $refundStatus !== null || $agreement->canRequestDepositRefund();
-                                                        $settlement = $agreement->deposit_settlement_preview ?? null;
-                                                    @endphp
-                                                    @if($showRefundBtn)
-                                                        @if($refundStatus === 'pending')
-                                                            <span class="d-inline-flex js-action-tooltip"
-                                                                  data-toggle="tooltip" data-placement="top"
-                                                                  title="Deposit Refund Pending Daily Financial Sheet Approval"
-                                                                  tabindex="0">
-                                                                <button type="button"
-                                                                        class="btn btn-sm btn-outline-secondary"
-                                                                        disabled
-                                                                        style="opacity: .45;"
-                                                                        aria-label="Deposit Refund Pending Daily Financial Sheet Approval">
-                                                                    <i class="fa fa-undo"></i>
-                                                                </button>
-                                                            </span>
-                                                        @elseif($refundStatus === 'posted')
-                                                            <span class="d-inline-flex js-action-tooltip"
-                                                                  data-toggle="tooltip" data-placement="top"
-                                                                  title="Deposit Already Refunded"
-                                                                  tabindex="0">
-                                                                <button type="button"
-                                                                        class="btn btn-sm btn-outline-secondary"
-                                                                        disabled
-                                                                        style="opacity: .45;"
-                                                                        aria-label="Deposit Already Refunded">
-                                                                    <i class="fa fa-undo"></i>
-                                                                </button>
-                                                            </span>
-                                                        @else
-                                                            <span class="d-inline-flex js-action-tooltip"
-                                                                  data-toggle="tooltip" data-placement="top"
-                                                                  title="Refund Deposit">
-                                                                <button type="button"
-                                                                        class="btn btn-sm btn-outline-success"
-                                                                        data-toggle="modal"
-                                                                        data-target="#refundDepositModal"
-                                                                        data-refund-deposit-btn
-                                                                        data-action="{{ route('agreements.refund-deposit', $agreement) }}"
-                                                                        data-amount="{{ number_format((float) ($settlement['refund_amount'] ?? 0), 2, '.', '') }}"
-                                                                        data-gross-deposit="{{ number_format((float) ($settlement['gross_deposit_amount'] ?? 0), 2, '.', '') }}"
-                                                                        data-deductions="{{ number_format((float) ($settlement['deductions_amount'] ?? 0), 2, '.', '') }}"
-                                                                        data-driver-outstanding="{{ number_format((float) ($settlement['driver_outstanding_amount'] ?? 0), 2, '.', '') }}"
-                                                                        data-debt-offset="{{ number_format((float) ($settlement['debt_offset_amount'] ?? 0), 2, '.', '') }}"
-                                                                        data-remaining-debt="{{ number_format((float) ($settlement['remaining_debt_amount'] ?? 0), 2, '.', '') }}"
-                                                                        aria-label="Refund Deposit">
-                                                                    <i class="fa fa-undo"></i>
-                                                                </button>
-                                                            </span>
-                                                        @endif
-                                                    @endif
-                                                    <a href="{{ route('agreements.pdf', $agreement) }}"
-                                                       class="btn btn-sm btn-outline-danger js-action-tooltip" target="_blank"
-                                                       data-toggle="tooltip" data-placement="top"
-                                                       title="Generate PDF" aria-label="Generate PDF">
-                                                        <i class="fa fa-file-pdf-o"></i>
-                                                    </a>
-                                                    <form action="{{ route('agreements.destroy', $agreement) }}"
-                                                          method="POST" style="display: inline;">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
-                                                                data-toggle="tooltip" data-placement="top"
-                                                                title="Delete Agreement" aria-label="Delete Agreement"
-                                                                onclick="return confirm('Are you sure?')">
-                                                            <i class="fa fa-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="11" class="text-center text-muted py-4">
-                                                <i class="fa fa-handshake fa-3x mb-3"></i>
-                                                <br>
-                                                No agreements found. <a href="{{ route('agreements.create') }}">Create
-                                                    your first agreement</a>
-                                            </td>
-                                        </tr>
-                                    @endforelse
-                                    </tbody>
+                                    <tbody></tbody>
                                 </table>
                             </div>
                         </div>
@@ -490,10 +296,68 @@
                 $('.js-action-tooltip').tooltip({ container: 'body' });
             }
 
+            function syncFiltersFromForm() {
+                filters.status = document.getElementById('agreementsFilterStatus').value;
+                filters.hasNotice = document.getElementById('agreementsHasNotice').checked;
+                filters.rented.from = document.getElementById('agreementsRentedFrom').value;
+                filters.rented.to = document.getElementById('agreementsRentedTo').value;
+                filters.closed.from = document.getElementById('agreementsClosedFrom').value;
+                filters.closed.to = document.getElementById('agreementsClosedTo').value;
+                filters.expired.from = document.getElementById('agreementsExpiredFrom').value;
+                filters.expired.to = document.getElementById('agreementsExpiredTo').value;
+                filters.notice.from = document.getElementById('agreementsNoticeFrom').value;
+                filters.notice.to = document.getElementById('agreementsNoticeTo').value;
+                filters.due.from = document.getElementById('agreementsDueFrom').value;
+                filters.due.to = document.getElementById('agreementsDueTo').value;
+                filters.refundStatus = document.getElementById('agreementsFilterRefundStatus').value;
+            }
+
+            function filterAjaxParams() {
+                syncFiltersFromForm();
+
+                return {
+                    filter_status: filters.status,
+                    filter_has_notice: filters.hasNotice ? 1 : 0,
+                    filter_rented_from: filters.rented.from,
+                    filter_rented_to: filters.rented.to,
+                    filter_closed_from: filters.closed.from,
+                    filter_closed_to: filters.closed.to,
+                    filter_expired_from: filters.expired.from,
+                    filter_expired_to: filters.expired.to,
+                    filter_notice_from: filters.notice.from,
+                    filter_notice_to: filters.notice.to,
+                    filter_due_from: filters.due.from,
+                    filter_due_to: filters.due.to,
+                    filter_refund_status: filters.refundStatus,
+                };
+            }
+
             const dataTable = $('#dataTable').DataTable({
                 processing: true,
+                serverSide: true,
+                deferRender: true,
+                pageLength: 25,
                 responsive: true,
                 order: [],
+                ajax: {
+                    url: '{{ route('agreements.index') }}',
+                    data: function (params) {
+                        return Object.assign(params, filterAjaxParams());
+                    },
+                },
+                columns: [
+                    { data: 'company', name: 'company' },
+                    { data: 'driver', name: 'driver', orderable: false, searchable: false },
+                    { data: 'car', name: 'car' },
+                    { data: 'start_date', name: 'start_date' },
+                    { data: 'end_date', name: 'end_date' },
+                    { data: 'notice_date', name: 'notice_date', orderable: false, searchable: false },
+                    { data: 'closing_date', name: 'closing_date' },
+                    { data: 'rent', name: 'rent', orderable: false, searchable: false },
+                    { data: 'esign_html', name: 'esign_html', orderable: false, searchable: false },
+                    { data: 'status_html', name: 'status_html', orderable: false, searchable: false },
+                    { data: 'actions_html', name: 'actions_html', orderable: false, searchable: false },
+                ],
             });
 
             initializeActionTooltips();
@@ -643,133 +507,137 @@
                 URL.revokeObjectURL(url);
             }
 
-            function collectAgreementsExportRows() {
-                const rows = [];
-                dataTable.rows({ search: 'applied', order: 'applied' }).every(function () {
-                    const node = this.node();
-                    if (!node) {
-                        return;
-                    }
-
-                    const cells = node.querySelectorAll('td');
-                    if (cells.length < 10) {
-                        return;
-                    }
-
-                    const row = [];
-                    for (let i = 0; i < 10; i++) {
-                        row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
-                    }
-
-                    rows.push(row);
+            function fetchAgreementsExportRows(callback) {
+                const params = Object.assign(filterAjaxParams(), {
+                    export: 1,
+                    search: (dataTable.search() || '').trim(),
                 });
 
-                return rows;
+                $.ajax({
+                    url: '{{ route('agreements.index') }}',
+                    method: 'GET',
+                    data: params,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                }).done(function (response) {
+                    callback(response.rows || []);
+                }).fail(function () {
+                    alert('Unable to export agreements. Please try again.');
+                    callback([]);
+                });
             }
 
             function exportAgreementsCsv() {
                 const exportMeta = buildAgreementsExportMeta();
-                const bodyRows = collectAgreementsExportRows();
                 const exportHeaders = getAgreementsExportHeaders();
 
-                if (bodyRows.length === 0) {
-                    alert('No records to export. Adjust your search or filters and try again.');
-                    return;
-                }
+                fetchAgreementsExportRows(function (bodyRows) {
+                    if (bodyRows.length === 0) {
+                        alert('No records to export. Adjust your search or filters and try again.');
+                        return;
+                    }
 
-                const lines = [csvEscape(exportMeta.title)];
-                exportMeta.lines.forEach(function (line) {
-                    lines.push(csvEscape(line));
-                });
-                lines.push('');
-                lines.push(exportHeaders.map(csvEscape).join(','));
-                bodyRows.forEach(function (row) {
-                    lines.push(row.map(csvEscape).join(','));
-                });
+                    const lines = [csvEscape(exportMeta.title)];
+                    exportMeta.lines.forEach(function (line) {
+                        lines.push(csvEscape(line));
+                    });
+                    lines.push('');
+                    lines.push(exportHeaders.map(csvEscape).join(','));
+                    bodyRows.forEach(function (row) {
+                        lines.push(row.map(csvEscape).join(','));
+                    });
 
-                downloadCsv(agreementsExportFilename('.csv'), lines);
+                    downloadCsv(agreementsExportFilename('.csv'), lines);
+                });
             }
 
             function exportAgreementsPdf() {
                 const exportMeta = buildAgreementsExportMeta();
-                const bodyRows = collectAgreementsExportRows();
                 const exportHeaders = getAgreementsExportHeaders();
-
-                if (bodyRows.length === 0) {
-                    alert('No records to export. Adjust your search or filters and try again.');
-                    return;
-                }
 
                 if (typeof pdfMake === 'undefined') {
                     alert('PDF export is not available. Please refresh the page and try again.');
                     return;
                 }
 
-                const tableBody = [
-                    exportHeaders.map(function (header) {
-                        return { text: header, style: 'tableHeader' };
-                    })
-                ];
-
-                bodyRows.forEach(function (row) {
-                    tableBody.push(row.map(function (cell) {
-                        return { text: cell, style: 'tableCell' };
-                    }));
-                });
-
-                const doc = {
-                    pageSize: 'A4',
-                    pageOrientation: 'landscape',
-                    pageMargins: [24, 48, 24, 32],
-                    content: [
-                        {
-                            text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
-                            style: 'title',
-                            margin: [0, 0, 0, 4]
-                        },
-                        ...exportMeta.lines.map(function (line) {
-                            return {
-                                text: line,
-                                style: 'subtitle',
-                                margin: [0, 0, 0, 2]
-                            };
-                        }),
-                        {
-                            text: '',
-                            margin: [0, 0, 0, 8]
-                        },
-                        {
-                            table: {
-                                headerRows: 1,
-                                widths: exportHeaders.map(function () { return '*'; }),
-                                body: tableBody
-                            },
-                            layout: 'lightHorizontalLines'
-                        }
-                    ],
-                    styles: {
-                        title: { fontSize: 14, bold: true },
-                        subtitle: { fontSize: 9, color: '#5e5873' },
-                        tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
-                        tableCell: { fontSize: 7 }
-                    },
-                    defaultStyle: { fontSize: 8 },
-                    footer: function (currentPage, pageCount) {
-                        return {
-                            text: 'Page ' + currentPage + ' of ' + pageCount,
-                            alignment: 'center',
-                            fontSize: 8,
-                            color: '#5e5873',
-                            margin: [0, 8, 0, 0]
-                        };
+                fetchAgreementsExportRows(function (bodyRows) {
+                    if (bodyRows.length === 0) {
+                        alert('No records to export. Adjust your search or filters and try again.');
+                        return;
                     }
-                };
 
-                pdfMake.createPdf(doc).download(agreementsExportFilename('.pdf'));
+                    const tableBody = [
+                        exportHeaders.map(function (header) {
+                            return { text: header, style: 'tableHeader' };
+                        }),
+                    ];
+
+                    bodyRows.forEach(function (row) {
+                        tableBody.push(row.map(function (cell) {
+                            return { text: cell, style: 'tableCell' };
+                        }));
+                    });
+
+                    const doc = {
+                        pageSize: 'A4',
+                        pageOrientation: 'landscape',
+                        pageMargins: [24, 48, 24, 32],
+                        content: [
+                            {
+                                text: exportMeta.title + ' — ' + new Date().toISOString().slice(0, 10),
+                                style: 'title',
+                                margin: [0, 0, 0, 4],
+                            },
+                            ...exportMeta.lines.map(function (line) {
+                                return {
+                                    text: line,
+                                    style: 'subtitle',
+                                    margin: [0, 0, 0, 2],
+                                };
+                            }),
+                            {
+                                text: '',
+                                margin: [0, 0, 0, 8],
+                            },
+                            {
+                                table: {
+                                    headerRows: 1,
+                                    widths: exportHeaders.map(function () { return '*'; }),
+                                    body: tableBody,
+                                },
+                                layout: 'lightHorizontalLines',
+                            },
+                        ],
+                        styles: {
+                            title: { fontSize: 14, bold: true },
+                            subtitle: { fontSize: 9, color: '#5e5873' },
+                            tableHeader: { fontSize: 8, bold: true, fillColor: '#f3f2f7' },
+                            tableCell: { fontSize: 7 },
+                        },
+                        defaultStyle: { fontSize: 8 },
+                        footer: function (currentPage, pageCount) {
+                            return {
+                                text: 'Page ' + currentPage + ' of ' + pageCount,
+                                alignment: 'center',
+                                fontSize: 8,
+                                color: '#5e5873',
+                                margin: [0, 8, 0, 0],
+                            };
+                        },
+                    };
+
+                    pdfMake.createPdf(doc).download(agreementsExportFilename('.pdf'));
+                });
             }
 
             $('#agreementsExportCsv').on('click', exportAgreementsCsv);
             $('#agreementsExportPdf').on('click', exportAgreementsPdf);
+
+            function isRangeActive(range) {
+                return !!(range.from || range.to);
+            }
 
             function todayYmd() {
                 const d = new Date();
@@ -781,144 +649,6 @@
                 if (range.from) return todayYmd();
                 return '';
             }
-
-            function dateInRange(iso, fromStr, toStr) {
-                if (!iso) return false;
-                const value = parseDateYmd(iso);
-                if (!value) return false;
-                const from = parseDateYmd(fromStr);
-                const to = parseDateYmd(toStr);
-                if (from && value < from) return false;
-                if (to && value > to) return false;
-                return true;
-            }
-
-            function isRangeActive(range) {
-                return !!(range.from || range.to);
-            }
-
-            function passesDateRange(iso, range) {
-                if (!isRangeActive(range)) {
-                    return true;
-                }
-                return dateInRange(iso, range.from, range.to);
-            }
-
-            function isClosedStatus(status) {
-                const name = (status || '').toLowerCase();
-                return name === 'terminated';
-            }
-
-            function isExpiredStatus(status) {
-                return (status || '').toLowerCase() === 'expired';
-            }
-
-            function isBillableRow(row) {
-                return row && row.getAttribute('data-is-billable') === '1';
-            }
-
-            function syncFiltersFromForm() {
-                filters.status = document.getElementById('agreementsFilterStatus').value;
-                filters.hasNotice = document.getElementById('agreementsHasNotice').checked;
-                filters.rented.from = document.getElementById('agreementsRentedFrom').value;
-                filters.rented.to = document.getElementById('agreementsRentedTo').value;
-                filters.closed.from = document.getElementById('agreementsClosedFrom').value;
-                filters.closed.to = document.getElementById('agreementsClosedTo').value;
-                filters.expired.from = document.getElementById('agreementsExpiredFrom').value;
-                filters.expired.to = document.getElementById('agreementsExpiredTo').value;
-                filters.notice.from = document.getElementById('agreementsNoticeFrom').value;
-                filters.notice.to = document.getElementById('agreementsNoticeTo').value;
-                filters.due.from = document.getElementById('agreementsDueFrom').value;
-                filters.due.to = document.getElementById('agreementsDueTo').value;
-                filters.refundStatus = document.getElementById('agreementsFilterRefundStatus').value;
-            }
-
-            function passesTerminationNoticeFilters(row) {
-                if (!row) {
-                    return !filters.hasNotice && !isRangeActive(filters.notice);
-                }
-
-                var billable = isBillableRow(row);
-                var noticeDate = row.getAttribute('data-notice-date') || '';
-
-                if (filters.hasNotice && (!billable || !noticeDate)) {
-                    return false;
-                }
-
-                if (isRangeActive(filters.notice) && (!billable || !passesDateRange(noticeDate, filters.notice))) {
-                    return false;
-                }
-
-                return true;
-            }
-
-            function passesFilters(row) {
-                if (!row) {
-                    return !filters.hasNotice && !isRangeActive(filters.notice);
-                }
-
-                var status = row.getAttribute('data-status') || '';
-                var startDate = row.getAttribute('data-start-date') || '';
-                var closedOn = row.getAttribute('data-closed-on') || '';
-                var noticeDate = row.getAttribute('data-notice-date') || '';
-                var endDate = row.getAttribute('data-end-date') || '';
-                var refundStatus = row.getAttribute('data-refund-status') || '';
-                var billable = isBillableRow(row);
-
-                if (filters.status && status !== filters.status) {
-                    return false;
-                }
-
-                if (!passesDateRange(startDate, filters.rented)) {
-                    return false;
-                }
-
-                if (isRangeActive(filters.closed)) {
-                    if (!isClosedStatus(status)) {
-                        return false;
-                    }
-                    if (!dateInRange(closedOn, filters.closed.from, closedRangeTo(filters.closed))) {
-                        return false;
-                    }
-                }
-
-                if (isRangeActive(filters.expired)) {
-                    if (!isExpiredStatus(status)) {
-                        return false;
-                    }
-                    if (!dateInRange(endDate, filters.expired.from, filters.expired.to)) {
-                        return false;
-                    }
-                }
-
-                if (filters.refundStatus && refundStatus !== filters.refundStatus) {
-                    return false;
-                }
-
-                if (!passesTerminationNoticeFilters(row)) {
-                    return false;
-                }
-
-                if (isRangeActive(filters.due)) {
-                    var endMatch = dateInRange(endDate, filters.due.from, filters.due.to);
-                    var noticeMatch = billable && dateInRange(noticeDate, filters.due.from, filters.due.to);
-                    if (!endMatch && !noticeMatch) {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-
-            $.fn.dataTable.ext.search.push(function (settings, searchData, dataIndex) {
-                if (!settings.nTable || settings.nTable.id !== 'dataTable') {
-                    return true;
-                }
-
-                var row = dataTable.row(dataIndex).node();
-
-                return passesFilters(row);
-            });
 
             function setFilterPanelOpen(isOpen) {
                 $('#agreementsFilterPanel').toggleClass('is-open', isOpen).attr('aria-hidden', isOpen ? 'false' : 'true');
@@ -934,13 +664,11 @@
             });
 
             $('#agreementsFilterStatus, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
 
             $('.agreements-date-filter').on('change input', function () {
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
 
             $('#agreementsFilterReset').on('click', function () {
@@ -948,8 +676,7 @@
                 $('#agreementsFilterRefundStatus').val('');
                 $('#agreementsHasNotice').prop('checked', false);
                 $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsExpiredFrom, #agreementsExpiredTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');
-                syncFiltersFromForm();
-                dataTable.draw();
+                dataTable.ajax.reload();
             });
         });
     </script>

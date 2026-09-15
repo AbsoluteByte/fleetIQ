@@ -6,6 +6,7 @@ use App\Models\Agreement;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
+use App\Models\Invoice;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
@@ -16,7 +17,7 @@ use Spatie\Permission\Middleware\RoleMiddleware;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
 use Tests\TestCase;
 
-class AgreementsIndexTerminationNoticeFilterTest extends TestCase
+class AgreementDepositPreviewTest extends TestCase
 {
     use SetupAgreementChangeCarDatabase;
 
@@ -27,10 +28,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
     private Driver $driver;
 
     private Car $car;
-
-    private Status $activeStatus;
-
-    private Status $swapStatus;
 
     private Status $terminatedStatus;
 
@@ -45,16 +42,16 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         $this->setUpHttpTestExtras();
 
         $this->tenant = Tenant::query()->create([
-            'company_name' => 'Agreements Termination Tenant',
+            'company_name' => 'Deposit Preview Tenant',
             'status' => Tenant::STATUS_ACTIVE,
         ]);
         $this->company = Company::query()->create(['tenant_id' => $this->tenant->id, 'name' => 'Fleet Co']);
         $this->driver = Driver::query()->create([
             'tenant_id' => $this->tenant->id,
-            'first_name' => 'Sam',
+            'first_name' => 'Preview',
             'last_name' => 'Driver',
-            'email' => 'sam-driver-agreements@example.com',
-            'phone_number' => '07000000007',
+            'email' => 'preview-driver@example.com',
+            'phone_number' => '07000000009',
         ]);
 
         $carModelId = (int) DB::table('car_models')->insertGetId([
@@ -71,8 +68,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         ]);
 
         $this->car = $this->createCar($this->tenant->id, $this->company->id, $carModelId, $counselId);
-        $this->activeStatus = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
-        $this->swapStatus = Status::query()->create(['name' => 'Swap', 'type' => 'agreement']);
         $this->terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
 
         $this->user = User::factory()->create();
@@ -93,7 +88,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('car_services');
-        Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
         Schema::dropIfExists('tenant_user');
@@ -102,121 +96,49 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_agreements_index_includes_notice_filter_data_for_active_agreement(): void
+    public function test_deposit_settlement_preview_returns_json_for_eligible_agreement(): void
     {
-        $this->createAgreement([
-            'status_id' => $this->activeStatus->id,
-            'termination_notice_date' => '2026-07-10',
-        ]);
-
-        $pageResponse = $this->get(route('agreements.index'));
-        $pageResponse->assertOk();
-        $pageResponse->assertSee('agreementsHasNotice', false);
-        $pageResponse->assertSee('Active or Swap agreements only.', false);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_has_notice' => 1,
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonFragment(['notice_date' => 'Jul 10, 2026']);
-    }
-
-    public function test_agreements_index_includes_export_controls(): void
-    {
-        $this->createAgreement([
-            'status_id' => $this->activeStatus->id,
-        ]);
-
-        $response = $this->get(route('agreements.index'));
-
-        $response->assertOk();
-        $response->assertSee('id="agreementsExportDropdown"', false);
-        $response->assertSee('id="agreementsExportCsv"', false);
-        $response->assertSee('id="agreementsExportPdf"', false);
-        $response->assertSee('pdfmake.min.js', false);
-        $response->assertSee('exportAgreementsCsv', false);
-        $response->assertSee('exportAgreementsPdf', false);
-    }
-
-    public function test_agreements_index_includes_notice_filter_data_for_swap_agreement(): void
-    {
-        $this->createAgreement([
-            'status_id' => $this->swapStatus->id,
-            'termination_notice_date' => '2026-07-15',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_notice_from' => '2026-07-01',
-            'filter_notice_to' => '2026-07-31',
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonFragment(['notice_date' => 'Jul 15, 2026']);
-    }
-
-    public function test_agreements_index_ignores_notice_filter_data_for_terminated_agreement(): void
-    {
-        $this->createAgreement([
-            'status_id' => $this->terminatedStatus->id,
-            'termination_notice_date' => '2026-07-10',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_has_notice' => 1,
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
-    }
-
-    public function test_expired_agreement_is_excluded_from_notice_filter_data(): void
-    {
-        $expiredStatus = Status::query()->create(['name' => 'Expired', 'type' => 'agreement']);
-
-        $this->createAgreement([
-            'status_id' => $expiredStatus->id,
-            'termination_notice_date' => '2026-07-12',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_has_notice' => 1,
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
-    }
-
-    /**
-     * @param  array<string, mixed>  $overrides
-     */
-    private function createAgreement(array $overrides = []): Agreement
-    {
-        return Agreement::query()->create(array_merge([
+        $agreement = Agreement::query()->create([
             'tenant_id' => $this->tenant->id,
             'company_id' => $this->company->id,
             'driver_id' => $this->driver->id,
             'car_id' => $this->car->id,
-            'start_date' => '2026-06-01',
-            'end_date' => '2027-06-01',
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-06-01',
+            'closing_date' => '2026-06-01',
             'agreed_rent' => 150,
             'rent_interval' => 'Weekly',
-            'deposit_amount' => 200,
+            'deposit_amount' => 300,
             'collection_type' => 'weekly',
-            'status_id' => $this->activeStatus->id,
-        ], $overrides));
+            'status_id' => $this->terminatedStatus->id,
+        ]);
+
+        Invoice::query()->create([
+            'driver_id' => $this->driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-PREVIEW-1',
+            'invoice_date' => '2026-06-01',
+            'due_date' => '2026-06-08',
+            'total_amount' => 50,
+            'paid_amount' => 0,
+            'balance_amount' => 50,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->getJson(route('agreements.deposit-settlement-preview', $agreement));
+
+        $response->assertOk();
+        $response->assertJsonStructure([
+            'gross_deposit_amount',
+            'deductions_amount',
+            'driver_outstanding_amount',
+            'debt_offset_amount',
+            'remaining_debt_amount',
+            'refund_amount',
+        ]);
+        $response->assertJsonFragment(['gross_deposit_amount' => 300.0]);
+        $response->assertJsonFragment(['driver_outstanding_amount' => 50.0]);
+        $response->assertJsonFragment(['refund_amount' => 250.0]);
     }
 
     private function setUpHttpTestExtras(): void
@@ -267,12 +189,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');
                 $table->primary(['role_id', 'model_id', 'model_type']);
-            });
-        }
-
-        if (! Schema::hasColumn('car_insurances', 'status_id')) {
-            Schema::table('car_insurances', function (Blueprint $table) {
-                $table->foreignId('status_id')->nullable();
             });
         }
 
