@@ -82,18 +82,13 @@ class PaymentController extends Controller
             ->addColumn('total_due_html', fn (Driver $driver) => $rowFor($driver)['total_due_html'])
             ->addColumn('credit_html', fn (Driver $driver) => $rowFor($driver)['credit_html'])
             ->addColumn('actions_html', fn (Driver $driver) => $rowFor($driver)['actions_html'])
-            ->filter(function ($query) use ($request) {
+            ->filter(function ($query) use ($request, $indexService) {
                 $keyword = trim((string) data_get($request->input('search'), 'value', ''));
                 if ($keyword === '') {
                     return;
                 }
 
-                $query->where(function ($inner) use ($keyword) {
-                    $inner->where('first_name', 'like', "%{$keyword}%")
-                        ->orWhere('last_name', 'like', "%{$keyword}%")
-                        ->orWhere('phone_number', 'like', "%{$keyword}%")
-                        ->orWhere('email', 'like', "%{$keyword}%");
-                });
+                $indexService->applySearchKeyword($query, $keyword);
             })
             ->rawColumns(['driver', 'total_due_html', 'credit_html', 'actions_html'])
             ->toJson();
@@ -108,12 +103,7 @@ class PaymentController extends Controller
 
         $keyword = trim((string) $request->input('search'));
         if ($keyword !== '') {
-            $query->where(function ($inner) use ($keyword) {
-                $inner->where('first_name', 'like', "%{$keyword}%")
-                    ->orWhere('last_name', 'like', "%{$keyword}%")
-                    ->orWhere('phone_number', 'like', "%{$keyword}%")
-                    ->orWhere('email', 'like', "%{$keyword}%");
-            });
+            $indexService->applySearchKeyword($query, $keyword);
         }
 
         $rows = $indexService->rowsForExport($query->get());
