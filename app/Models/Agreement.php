@@ -180,11 +180,15 @@ class Agreement extends Model
 
     public function canRequestDepositRefund(): bool
     {
+        $hasRefund = $this->relationLoaded('depositRefund')
+            ? $this->depositRefund !== null
+            : $this->depositRefund()->exists();
+
         return $this->isClosedForDepositRefund()
             && (float) $this->deposit_amount > 0
             && ! $this->hasBeenUpgraded()
             && ! $this->hasBeenRenewed()
-            && ! $this->depositRefund()->exists();
+            && ! $hasRefund;
     }
 
     /**
@@ -247,6 +251,10 @@ class Agreement extends Model
 
     public function hasBeenUpgraded(): bool
     {
+        if ($this->relationLoaded('upgradedToAgreement')) {
+            return $this->upgradedToAgreement !== null;
+        }
+
         return $this->upgradedToAgreement()->exists();
     }
 

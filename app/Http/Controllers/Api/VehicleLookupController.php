@@ -61,12 +61,23 @@ class VehicleLookupController extends Controller
             'make' => $make,
             'model' => $model,
             'make_model' => $makeModel !== '' ? $makeModel : null,
-            'year' => $car->manufacture_year ?? $car->registration_year,
+            'year' => $this->normalizeYear($car->manufacture_year ?? $car->registration_year),
             'colour' => $car->color,
             'vin' => $car->vin,
             'fleet_status' => $car->fleet_status,
             'company' => optional($car->company)->name,
         ];
+    }
+
+    private function normalizeYear(mixed $year): ?int
+    {
+        if ($year === null || $year === '') {
+            return null;
+        }
+
+        $int = (int) $year;
+
+        return $int >= 1900 && $int <= ((int) date('Y') + 1) ? $int : null;
     }
 
     /**

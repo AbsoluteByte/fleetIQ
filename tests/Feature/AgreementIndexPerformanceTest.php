@@ -16,7 +16,7 @@ use Spatie\Permission\Middleware\RoleMiddleware;
 use Tests\Concerns\SetupAgreementChangeCarDatabase;
 use Tests\TestCase;
 
-class AgreementsIndexTerminationNoticeFilterTest extends TestCase
+class AgreementIndexPerformanceTest extends TestCase
 {
     use SetupAgreementChangeCarDatabase;
 
@@ -29,8 +29,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
     private Car $car;
 
     private Status $activeStatus;
-
-    private Status $swapStatus;
 
     private Status $terminatedStatus;
 
@@ -45,7 +43,7 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         $this->setUpHttpTestExtras();
 
         $this->tenant = Tenant::query()->create([
-            'company_name' => 'Agreements Termination Tenant',
+            'company_name' => 'Agreement Index Performance Tenant',
             'status' => Tenant::STATUS_ACTIVE,
         ]);
         $this->company = Company::query()->create(['tenant_id' => $this->tenant->id, 'name' => 'Fleet Co']);
@@ -53,8 +51,8 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'first_name' => 'Sam',
             'last_name' => 'Driver',
-            'email' => 'sam-driver-agreements@example.com',
-            'phone_number' => '07000000007',
+            'email' => 'sam-perf@example.com',
+            'phone_number' => '07000000008',
         ]);
 
         $carModelId = (int) DB::table('car_models')->insertGetId([
@@ -72,7 +70,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
 
         $this->car = $this->createCar($this->tenant->id, $this->company->id, $carModelId, $counselId);
         $this->activeStatus = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
-        $this->swapStatus = Status::query()->create(['name' => 'Swap', 'type' => 'agreement']);
         $this->terminatedStatus = Status::query()->create(['name' => 'Terminated', 'type' => 'agreement']);
 
         $this->user = User::factory()->create();
@@ -93,7 +90,6 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('car_services');
-        Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
         Schema::dropIfExists('tenant_user');
@@ -102,101 +98,81 @@ class AgreementsIndexTerminationNoticeFilterTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_agreements_index_includes_notice_filter_data_for_active_agreement(): void
+    public function test_agreements_index_ajax_datatable_returns_expected_columns(): void
     {
-        $this->createAgreement([
-            'status_id' => $this->activeStatus->id,
-            'termination_notice_date' => '2026-07-10',
-        ]);
-
-        $pageResponse = $this->get(route('agreements.index'));
-        $pageResponse->assertOk();
-        $pageResponse->assertSee('agreementsHasNotice', false);
-        $pageResponse->assertSee('Active or Swap agreements only.', false);
+        $this->createAgreement(['status_id' => $this->activeStatus->id]);
 
         $response = $this->getJson(route('agreements.index', [
             'draw' => 1,
             'start' => 0,
             'length' => 25,
-            'filter_has_notice' => 1,
         ]), ['X-Requested-With' => 'XMLHttpRequest']);
 
         $response->assertOk();
-        $response->assertJsonFragment(['notice_date' => 'Jul 10, 2026']);
+        $response->assertJsonStructure([
+            'draw',
+            'recordsTotal',
+            'recordsFiltered',
+            'data' => [
+                [
+                    'company',
+                    'driver',
+                    'car',
+                    'start_date',
+                    'end_date',
+                    'notice_date',
+                    'closing_date',
+                    'rent',
+                    'esign_html',
+                    'status_html',
+                    'actions_html',
+                ],
+            ],
+        ]);
+        $response->assertJsonFragment(['company' => 'Fleet Co']);
+        $response->assertJsonFragment(['car' => 'TN123']);
     }
 
-    public function test_agreements_index_includes_export_controls(): void
+    public function test_agreements_index_query_count_is_bounded_without_upgrade_n_plus_one(): void
     {
+        for ($i = 0; $i < 5; $i++) {
+            $this->createAgreement([
+                'status_id' => $this->activeStatus->id,
+                'termination_notice_date' => '2026-07-10',
+            ]);
+        }
+
         $this->createAgreement([
-            'status_id' => $this->activeStatus->id,
+            'status_id' => $this->terminatedStatus->id,
+            'closing_date' => '2026-06-01',
+            'deposit_amount' => 250,
         ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $response = $this->getJson(route('agreements.index', [
+            'draw' => 1,
+            'start' => 0,
+            'length' => 25,
+        ]), ['X-Requested-With' => 'XMLHttpRequest']);
+
+        $response->assertOk();
+        $queryCount = count(DB::getQueryLog());
+
+        $this->assertLessThanOrEqual(30, $queryCount, 'Expected bounded query count for agreements datatable page');
+    }
+
+    public function test_agreements_index_page_loads_without_preloading_all_agreements(): void
+    {
+        $this->createAgreement(['status_id' => $this->activeStatus->id]);
 
         $response = $this->get(route('agreements.index'));
 
         $response->assertOk();
-        $response->assertSee('id="agreementsExportDropdown"', false);
-        $response->assertSee('id="agreementsExportCsv"', false);
-        $response->assertSee('id="agreementsExportPdf"', false);
-        $response->assertSee('pdfmake.min.js', false);
-        $response->assertSee('exportAgreementsCsv', false);
-        $response->assertSee('exportAgreementsPdf', false);
-    }
-
-    public function test_agreements_index_includes_notice_filter_data_for_swap_agreement(): void
-    {
-        $this->createAgreement([
-            'status_id' => $this->swapStatus->id,
-            'termination_notice_date' => '2026-07-15',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_notice_from' => '2026-07-01',
-            'filter_notice_to' => '2026-07-31',
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonFragment(['notice_date' => 'Jul 15, 2026']);
-    }
-
-    public function test_agreements_index_ignores_notice_filter_data_for_terminated_agreement(): void
-    {
-        $this->createAgreement([
-            'status_id' => $this->terminatedStatus->id,
-            'termination_notice_date' => '2026-07-10',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_has_notice' => 1,
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
-    }
-
-    public function test_expired_agreement_is_excluded_from_notice_filter_data(): void
-    {
-        $expiredStatus = Status::query()->create(['name' => 'Expired', 'type' => 'agreement']);
-
-        $this->createAgreement([
-            'status_id' => $expiredStatus->id,
-            'termination_notice_date' => '2026-07-12',
-        ]);
-
-        $response = $this->getJson(route('agreements.index', [
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-            'filter_has_notice' => 1,
-        ]), ['X-Requested-With' => 'XMLHttpRequest']);
-
-        $response->assertOk();
-        $response->assertJsonCount(0, 'data');
+        $response->assertSee('serverSide: true', false);
+        $response->assertSee('agreementsHasNotice', false);
+        $response->assertDontSee('data-notice-date="2026-07-10"', false);
     }
 
     /**
