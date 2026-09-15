@@ -22,6 +22,7 @@ class ReservationController extends Controller
     private const BLOCKED_FLEET_STATUSES = [
         Car::FLEET_STATUS_PREPARATION_FOR_PHVL,
         'damaged',
+        Car::FLEET_STATUS_MECHANICAL_REPAIR,
         'written_off',
         'stolen',
         'for_sale',

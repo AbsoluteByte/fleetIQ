@@ -259,9 +259,69 @@
                                     </div>
                                 </div>
                             @endif
+                            @php
+                                $mechanicalRepairHistories = $car->statusHistories->filter(
+                                    fn ($entry) => $entry->new_status === \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR
+                                );
+                            @endphp
+                            @if($mechanicalRepairHistories->isNotEmpty())
+                                <div class="col-12 mb-4">
+                                    <h4 class="border-bottom pb-2 mb-3 mt-2">Mechanical repair history</h4>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="thead-light">
+                                            <tr>
+                                                <th>Issue reported</th>
+                                                <th>Allocated to</th>
+                                                <th>Allocation date</th>
+                                                <th>Completed</th>
+                                                <th>Details</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach($mechanicalRepairHistories as $mechEntry)
+                                                @php
+                                                    $mechData = is_array($mechEntry->status_data) ? $mechEntry->status_data : [];
+                                                    $issueDate = $mechData['issue_reported_date'] ?? null;
+                                                    $allocDate = $mechData['allocation_date'] ?? null;
+                                                    $completedDate = $mechData['completed_date'] ?? null;
+                                                    $formatMechDate = function ($value) {
+                                                        if ($value instanceof \DateTimeInterface) {
+                                                            return $value->format('d/m/Y');
+                                                        }
+                                                        if (is_string($value) && strlen($value) >= 10) {
+                                                            try {
+                                                                return \Carbon\Carbon::parse(substr($value, 0, 10))->format('d/m/Y');
+                                                            } catch (\Throwable) {
+                                                                return $value;
+                                                            }
+                                                        }
+
+                                                        return $value ? (string) $value : '—';
+                                                    };
+                                                @endphp
+                                                <tr>
+                                                    <td class="text-nowrap">{{ $formatMechDate($issueDate) }}</td>
+                                                    <td>{{ $mechData['allocated_to'] ?? '—' }}</td>
+                                                    <td class="text-nowrap">{{ $formatMechDate($allocDate) }}</td>
+                                                    <td class="text-nowrap">{{ $formatMechDate($completedDate) }}</td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                data-toggle="modal"
+                                                                data-target="#carStatusHistoryModal{{ $mechEntry->id }}">
+                                                            View details
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            @endif
                             @if($car->statusHistories->isNotEmpty())
                                 @php
-                                    $historyStep2Statuses = ['reserved', 'vehicle_swap', 'damaged', 'written_off', 'stolen', 'for_sale', 'sold'];
+                                    $historyStep2Statuses = ['reserved', 'vehicle_swap', 'damaged', \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR, 'written_off', 'stolen', 'for_sale', 'sold'];
                                     $historyTotalCount = $car->statusHistories->count();
                                     $historyExtraCount = max(0, $historyTotalCount - 2);
                                 @endphp

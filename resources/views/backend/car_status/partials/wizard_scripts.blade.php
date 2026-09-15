@@ -165,11 +165,40 @@
             $preview.html('<strong>Selected:</strong> ' + names.join(', '));
         });
 
+        function selectedCarFleetStatus() {
+            const $opt = $('#fleet_wizard_car_id option:selected');
+            if (!$opt.length || !$opt.val()) {
+                return '';
+            }
+
+            return String($opt.attr('data-fleet-status') || '').trim();
+        }
+
+        function refreshMechanicalRepairClosePanel() {
+            const $close = $('.fleet-status-panel[data-status="mechanical_repair_close"]');
+            if (!$close.length) {
+                return;
+            }
+            if (isEditMode) {
+                $close.addClass('d-none');
+                return;
+            }
+            const current = selectedCarFleetStatus();
+            const target = String($('#fleet_target_status').val() || '').trim();
+            const show = current === 'mechanical_repair' && target !== '' && target !== 'mechanical_repair';
+            $close.toggleClass('d-none', !show);
+        }
+
         function showPanel(status) {
             $('.fleet-status-panel').each(function () {
-                const match = $(this).data('status') === status;
+                const panelStatus = String($(this).data('status') || '');
+                if (panelStatus === 'mechanical_repair_close') {
+                    return;
+                }
+                const match = panelStatus === status;
                 $(this).toggleClass('d-none', !match);
             });
+            refreshMechanicalRepairClosePanel();
         }
 
         function fleetSelectedCarRegistration() {
@@ -241,6 +270,8 @@
 
         $('#fleet_wizard_car_id, #fleet_target_status').on('change', function () {
             if (!$('#fleet_step2').hasClass('d-none')) {
+                const status = $('#fleet_target_status').val();
+                showPanel(status);
                 updateStep2Summary();
                 updateAvailableForRentWarning();
             }
@@ -329,7 +360,12 @@
 
             if (isEditMode) {
                 $('.fleet-status-panel').each(function () {
-                    const isActivePanel = String($(this).data('status') || '') === oldTarget;
+                    const panelStatus = String($(this).data('status') || '');
+                    if (panelStatus === 'mechanical_repair_close') {
+                        $(this).find(':input:not([type="file"])').prop('disabled', true);
+                        return;
+                    }
+                    const isActivePanel = panelStatus === oldTarget;
                     $(this).find(':input:not([type="file"])').prop('disabled', !isActivePanel);
                 });
             } else {
@@ -352,6 +388,7 @@
             refreshFleetSoldPriceTotal();
             updateStep2Summary();
             updateAvailableForRentWarning();
+            refreshMechanicalRepairClosePanel();
         }
     });
 </script>

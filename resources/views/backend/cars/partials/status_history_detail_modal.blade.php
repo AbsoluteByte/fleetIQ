@@ -1,6 +1,15 @@
 @php
     /** @var \App\Models\CarStatusHistory $entry */
-    $step2Statuses = ['reserved', 'vehicle_swap', 'damaged', 'written_off', 'stolen', 'for_sale', 'sold'];
+    $step2Statuses = ['reserved', 'vehicle_swap', 'damaged', \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR, 'written_off', 'stolen', 'for_sale', 'sold'];
+    $mechanicalRepairFieldLabels = [
+        'issue_reported_date' => 'Date issue reported',
+        'issue_details' => 'Issue / fault details',
+        'allocation_date' => 'Allocation date',
+        'allocated_to' => 'Allocated to',
+        'repair_progress_notes' => 'Repair / progress notes',
+        'completed_date' => 'Date vehicle left / completed',
+        'completion_notes' => 'Leaving / completion notes',
+    ];
 @endphp
 @if(in_array($entry->new_status, $step2Statuses, true))
     @php
@@ -86,6 +95,8 @@
                                         Driver
                                     @elseif($key === 'reservation_payments')
                                         Deposit payments
+                                    @elseif($entry->new_status === \App\Models\Car::FLEET_STATUS_MECHANICAL_REPAIR && isset($mechanicalRepairFieldLabels[$key]))
+                                        {{ $mechanicalRepairFieldLabels[$key] }}
                                     @else
                                         {{ ucwords(str_replace('_', ' ', (string) $key)) }}
                                     @endif
