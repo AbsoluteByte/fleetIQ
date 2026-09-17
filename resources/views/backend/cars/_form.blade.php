@@ -104,7 +104,7 @@
                     <x-car-document-actions
                         :view-url="route('cars.view.v5', [$model, $loop->index])"
                         :download-url="route('cars.download.v5', [$model, $loop->index])"
-                        :remove-url="route('cars.v5-document.destroy', [$model, $loop->index])"
+                        :remove-url="($canDeleteV5Documents ?? false) ? route('cars.v5-document.destroy', [$model, $loop->index]) : null"
                         :label="'V5 document' . (count($model->v5DocumentFileNames()) > 1 ? ' #' . $loop->iteration : '')"
                     />
                 @endforeach
