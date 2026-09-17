@@ -142,4 +142,9 @@ class User extends Authenticatable
     {
         return $this->tenants()->wherePivot('role', 'admin');
     }
+
+    public function canDeleteV5Documents(): bool
+    {
+        return app(\App\Services\V5DocumentAuthorizationService::class)->canDeleteV5Documents($this);
+    }
 }

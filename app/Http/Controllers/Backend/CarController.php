@@ -21,6 +21,7 @@ use App\Models\InsuranceProvider;
 use App\Models\Status;
 use App\Services\CarInsuranceFleetNotificationService;
 use App\Services\PhvlArchiveService;
+use App\Services\V5DocumentAuthorizationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -75,7 +76,9 @@ class CarController extends Controller
         $rentedCarIds = Agreement::rentedCarIdsForTenant($tenant->id);
         $activeOrSwapCarIds = Agreement::activeOrSwapCarIdsForTenant($tenant->id);
 
-        return view($this->dir.'index', compact('cars', 'rentedCarIds', 'activeOrSwapCarIds'));
+        $canDeleteV5Documents = $this->canDeleteV5DocumentsForCurrentUser();
+
+        return view($this->dir.'index', compact('cars', 'rentedCarIds', 'activeOrSwapCarIds', 'canDeleteV5Documents'));
     }
 
     // ✅ Updated Create
@@ -98,7 +101,9 @@ class CarController extends Controller
         $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
-        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        $canDeleteV5Documents = $this->canDeleteV5DocumentsForCurrentUser();
+
+        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses', 'canDeleteV5Documents'));
     }
 
     // ✅ Updated Store
@@ -452,7 +457,9 @@ class CarController extends Controller
         $this->ensureInsuranceAppliedStatus();
         $statuses = Status::where('type', 'insurance')->get();
 
-        return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses'));
+        $canDeleteV5Documents = $this->canDeleteV5DocumentsForCurrentUser();
+
+        return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses', 'canDeleteV5Documents'));
     }
 
     // ✅ Updated Update
@@ -861,6 +868,11 @@ class CarController extends Controller
             abort(403, 'Unauthorized access');
         }
 
+        if ($car->v5DocumentFileNames() !== [] && ! $this->canDeleteV5DocumentsForCurrentUser()) {
+            return redirect()->route($this->url.'index')
+                ->with('error', 'Only Jawad can delete a vehicle that has V5 documents.');
+        }
+
         try {
             $registration = $car->registration;
 
@@ -1008,6 +1020,13 @@ class CarController extends Controller
     {
         $this->authorizeCarTenant($car);
 
+        if (! $this->canDeleteV5DocumentsForCurrentUser()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Only Jawad is authorised to delete V5 documents.',
+            ], 403);
+        }
+
         $names = $car->v5DocumentFileNames();
         if ($names === []) {
             return response()->json(['ok' => true]);
@@ -1135,6 +1154,11 @@ class CarController extends Controller
     {
         $tenant = Auth::user()->currentTenant();
         abort_unless($tenant && (int) $car->tenant_id === (int) $tenant->id, 403);
+    }
+
+    private function canDeleteV5DocumentsForCurrentUser(): bool
+    {
+        return app(V5DocumentAuthorizationService::class)->canDeleteV5Documents();
     }
 
     public function statusReport(string $status)

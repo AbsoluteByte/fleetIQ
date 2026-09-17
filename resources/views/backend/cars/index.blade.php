@@ -185,17 +185,30 @@
                                                             <i class="fa fa-bell"></i>
                                                         </button>
                                                     </span>
-                                                    <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                    @php
+                                                        $carHasV5 = $car->v5DocumentFileNames() !== [];
+                                                        $canDeleteThisCar = ! $carHasV5 || ($canDeleteV5Documents ?? false);
+                                                    @endphp
+                                                    @if($canDeleteThisCar)
+                                                        <form action="{{ route('cars.destroy', $car) }}" method="POST" style="display: inline;">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger js-action-tooltip"
+                                                                    data-toggle="tooltip" data-placement="top"
+                                                                    title="Delete Car" aria-label="Delete Car"
+                                                                    data-car-registration="{{ $car->registration }}"
+                                                                    onclick="if (!confirm('Are you sure?')) { return false; } try { sessionStorage.setItem('fleetiq_deleted_car_registration', this.dataset.carRegistration || ''); } catch (e) {} return true;">
+                                                                <i class="fa fa-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    @else
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary js-action-tooltip" disabled
                                                                 data-toggle="tooltip" data-placement="top"
-                                                                title="Delete Car" aria-label="Delete Car"
-                                                                data-car-registration="{{ $car->registration }}"
-                                                                onclick="if (!confirm('Are you sure?')) { return false; } try { sessionStorage.setItem('fleetiq_deleted_car_registration', this.dataset.carRegistration || ''); } catch (e) {} return true;">
+                                                                title="Only Jawad can delete a vehicle that has V5 documents"
+                                                                aria-label="Delete Car (restricted)">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
-                                                    </form>
+                                                    @endif
                                                 </div>
                                             </td>
                                             <td>{{ $car->vin }}</td>
