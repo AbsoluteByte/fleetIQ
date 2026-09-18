@@ -98,6 +98,37 @@ class AgreementIndexPerformanceTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_agreements_index_search_finds_driver_by_full_name_and_postcode(): void
+    {
+        $this->driver->update([
+            'first_name' => 'Jane',
+            'last_name' => 'Postsearch',
+            'post_code' => 'SW1A 1AA',
+        ]);
+        $otherDriver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Other',
+            'last_name' => 'Person',
+            'email' => 'other-postsearch@example.com',
+            'phone_number' => '07000000009',
+            'post_code' => 'M1 1AE',
+        ]);
+        $this->createAgreement(['status_id' => $this->activeStatus->id, 'driver_id' => $this->driver->id]);
+        $this->createAgreement(['status_id' => $this->activeStatus->id, 'driver_id' => $otherDriver->id]);
+
+        $byFullName = $this->agreementsDatatableResponse(['search' => ['value' => 'Jane Postsearch']]);
+        $byFullName->assertOk();
+        $byFullName->assertJsonCount(1, 'data');
+
+        $byPostcodeSpaced = $this->agreementsDatatableResponse(['search' => ['value' => 'SW1A 1AA']]);
+        $byPostcodeSpaced->assertOk();
+        $byPostcodeSpaced->assertJsonCount(1, 'data');
+
+        $byPostcodeCompact = $this->agreementsDatatableResponse(['search' => ['value' => 'SW1A1AA']]);
+        $byPostcodeCompact->assertOk();
+        $byPostcodeCompact->assertJsonCount(1, 'data');
+    }
+
     public function test_agreements_index_ajax_datatable_returns_expected_columns(): void
     {
         $this->createAgreement(['status_id' => $this->activeStatus->id]);
@@ -173,6 +204,18 @@ class AgreementIndexPerformanceTest extends TestCase
         $response->assertSee('serverSide: true', false);
         $response->assertSee('agreementsHasNotice', false);
         $response->assertDontSee('data-notice-date="2026-07-10"', false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     */
+    private function agreementsDatatableResponse(array $params = [])
+    {
+        return $this->getJson(route('agreements.index', array_merge([
+            'draw' => 1,
+            'start' => 0,
+            'length' => 25,
+        ], $params)), ['X-Requested-With' => 'XMLHttpRequest']);
     }
 
     /**

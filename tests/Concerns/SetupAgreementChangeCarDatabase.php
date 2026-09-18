@@ -124,9 +124,11 @@ trait SetupAgreementChangeCarDatabase
             $table->id();
             $table->foreignId('tenant_id')->nullable();
             $table->string('first_name')->nullable();
+            $table->string('middle_name')->nullable();
             $table->string('last_name')->nullable();
             $table->string('email')->nullable();
             $table->string('phone_number')->nullable();
+            $table->string('post_code')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

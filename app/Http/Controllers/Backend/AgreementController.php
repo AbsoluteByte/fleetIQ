@@ -127,21 +127,13 @@ class AgreementController extends Controller
             ->addColumn('esign_html', fn (Agreement $agreement) => $rowFor($agreement)['esign_html'])
             ->addColumn('status_html', fn (Agreement $agreement) => $rowFor($agreement)['status_html'])
             ->addColumn('actions_html', fn (Agreement $agreement) => $rowFor($agreement)['actions_html'])
-            ->filter(function ($query) use ($request) {
+            ->filter(function ($query) use ($request, $indexService) {
                 $keyword = trim((string) data_get($request->input('search'), 'value', ''));
                 if ($keyword === '') {
                     return;
                 }
 
-                $query->where(function ($inner) use ($keyword) {
-                    $inner->whereHas('company', fn ($company) => $company->where('name', 'like', "%{$keyword}%"))
-                        ->orWhereHas('driver', fn ($driver) => $driver
-                            ->where('first_name', 'like', "%{$keyword}%")
-                            ->orWhere('last_name', 'like', "%{$keyword}%")
-                            ->orWhere('post_code', 'like', "%{$keyword}%"))
-                        ->orWhereHas('car', fn ($car) => $car->where('registration', 'like', "%{$keyword}%"))
-                        ->orWhere('paying_company_name', 'like', "%{$keyword}%");
-                });
+                $indexService->applySearchKeyword($query, $keyword);
             })
             ->orderColumn('company', fn ($query, $order) => $query->orderBy(
                 Company::select('name')->whereColumn('companies.id', 'agreements.company_id'),
@@ -161,15 +153,7 @@ class AgreementController extends Controller
 
         $keyword = trim((string) $request->input('search'));
         if ($keyword !== '') {
-            $query->where(function ($inner) use ($keyword) {
-                $inner->whereHas('company', fn ($company) => $company->where('name', 'like', "%{$keyword}%"))
-                    ->orWhereHas('driver', fn ($driver) => $driver
-                        ->where('first_name', 'like', "%{$keyword}%")
-                        ->orWhere('last_name', 'like', "%{$keyword}%")
-                        ->orWhere('post_code', 'like', "%{$keyword}%"))
-                    ->orWhereHas('car', fn ($car) => $car->where('registration', 'like', "%{$keyword}%"))
-                    ->orWhere('paying_company_name', 'like', "%{$keyword}%");
-            });
+            $indexService->applySearchKeyword($query, $keyword);
         }
 
         $rows = $indexService->rowsForExport($query->get(), $upgradeService);

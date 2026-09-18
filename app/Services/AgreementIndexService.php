@@ -116,6 +116,50 @@ class AgreementIndexService
         return $query;
     }
 
+    public function applySearchKeyword(Builder $query, string $keyword): Builder
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            return $query;
+        }
+
+        $postcodeNormalized = strtoupper(preg_replace('/\s+/', '', $keyword) ?? '');
+
+        return $query->where(function (Builder $inner) use ($keyword, $postcodeNormalized) {
+            $inner->whereHas('company', fn (Builder $company) => $company->where('name', 'like', "%{$keyword}%"))
+                ->orWhereHas('driver', fn (Builder $driver) => $this->applyDriverKeywordSearch($driver, $keyword, $postcodeNormalized))
+                ->orWhereHas('car', fn (Builder $car) => $car->where('registration', 'like', "%{$keyword}%"))
+                ->orWhere('paying_company_name', 'like', "%{$keyword}%");
+        });
+    }
+
+    private function applyDriverKeywordSearch(Builder $driver, string $keyword, string $postcodeNormalized): void
+    {
+        $driver->where(function (Builder $match) use ($keyword, $postcodeNormalized) {
+            $match->where('first_name', 'like', "%{$keyword}%")
+                ->orWhere('middle_name', 'like', "%{$keyword}%")
+                ->orWhere('last_name', 'like', "%{$keyword}%")
+                ->orWhere('post_code', 'like', "%{$keyword}%");
+
+            if ($postcodeNormalized !== '') {
+                $match->orWhereRaw(
+                    "REPLACE(UPPER(COALESCE(post_code, '')), ' ', '') LIKE ?",
+                    ['%'.$postcodeNormalized.'%']
+                );
+            }
+
+            $parts = preg_split('/\s+/', $keyword, -1, PREG_SPLIT_NO_EMPTY);
+            if (is_array($parts) && count($parts) >= 2) {
+                $first = $parts[0];
+                $last = $parts[array_key_last($parts)];
+                $match->orWhere(function (Builder $name) use ($first, $last) {
+                    $name->where('first_name', 'like', "%{$first}%")
+                        ->where('last_name', 'like', "%{$last}%");
+                });
+            }
+        });
+    }
+
     /**
      * @return array<string, mixed>
      */
