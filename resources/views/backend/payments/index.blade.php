@@ -316,7 +316,7 @@
                     { data: 'payments_count', name: 'payments_count', searchable: false },
                     { data: 'payment_due', name: 'payment_due', orderable: false, searchable: false },
                     { data: 'last_payment', name: 'last_payment', orderable: false, searchable: false },
-                    { data: 'total_due_html', name: 'total_due_html', orderable: false, searchable: false },
+                    { data: 'total_due_html', name: 'total_due', orderable: true, searchable: false },
                     { data: 'credit_html', name: 'credit_html', orderable: false, searchable: false },
                     { data: 'actions_html', name: 'actions_html', orderable: false, searchable: false },
                 ],

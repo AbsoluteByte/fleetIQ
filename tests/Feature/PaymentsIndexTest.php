@@ -248,6 +248,35 @@ class PaymentsIndexTest extends TestCase
         $filteredResponse->assertJsonPath('data.0.last_payment', '15 Jul 2026');
     }
 
+    public function test_payments_index_sorts_by_total_due_asc_and_desc(): void
+    {
+        $lowerDueDriver = $this->createDriver('Miriam', 'Sort', 'miriam-sort@example.com');
+        $higherDueDriver = $this->createDriver('Zara', 'Sort', 'zara-sort@example.com');
+
+        $this->createOpenInvoice($lowerDueDriver, 'INV-LOW', 50);
+        $this->createOpenInvoice($higherDueDriver, 'INV-HIGH', 200);
+
+        $sortParams = $this->paymentsDatatableTotalDueSortParams();
+
+        $descResponse = $this->paymentsDatatableResponse(array_merge($sortParams, [
+            'order' => [
+                ['column' => 8, 'dir' => 'desc'],
+            ],
+        ]));
+        $descResponse->assertOk();
+        $descResponse->assertJsonPath('data.0.total_due_html', '<strong class="text-danger">£200.00</strong>');
+        $descResponse->assertJsonPath('data.1.total_due_html', '<strong class="text-danger">£50.00</strong>');
+
+        $ascResponse = $this->paymentsDatatableResponse(array_merge($sortParams, [
+            'order' => [
+                ['column' => 8, 'dir' => 'asc'],
+            ],
+        ]));
+        $ascResponse->assertOk();
+        $ascResponse->assertJsonPath('data.0.total_due_html', '<strong class="text-danger">£50.00</strong>');
+        $ascResponse->assertJsonPath('data.1.total_due_html', '<strong class="text-danger">£200.00</strong>');
+    }
+
     public function test_payments_index_shows_total_due_and_credit_without_n_plus_one_queries(): void
     {
         $driver = $this->createDriver('Due', 'Driver', 'due@example.com');
@@ -383,15 +412,62 @@ class PaymentsIndexTest extends TestCase
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function paymentsDatatableTotalDueSortParams(): array
+    {
+        return [
+            'columns' => [
+                ['data' => 'driver', 'name' => 'driver', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'vehicle', 'name' => 'vehicle', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'pay_to', 'name' => 'pay_to', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'phone', 'name' => 'phone', 'searchable' => 'true', 'orderable' => 'true'],
+                ['data' => 'invoices_count', 'name' => 'invoices_count', 'searchable' => 'false', 'orderable' => 'true'],
+                ['data' => 'payments_count', 'name' => 'payments_count', 'searchable' => 'false', 'orderable' => 'true'],
+                ['data' => 'payment_due', 'name' => 'payment_due', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'last_payment', 'name' => 'last_payment', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'total_due_html', 'name' => 'total_due', 'searchable' => 'false', 'orderable' => 'true'],
+                ['data' => 'credit_html', 'name' => 'credit_html', 'searchable' => 'false', 'orderable' => 'false'],
+                ['data' => 'actions_html', 'name' => 'actions_html', 'searchable' => 'false', 'orderable' => 'false'],
+            ],
+        ];
+    }
+
+    private function createOpenInvoice(Driver $driver, string $invoiceNo, float $balance): Invoice
+    {
+        return Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => $invoiceNo,
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => $balance,
+            'paid_amount' => 0,
+            'balance_amount' => $balance,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $params
      */
     private function paymentsDatatableResponse(array $params = [])
     {
-        return $this->getJson(route('payments.index', array_merge([
-            'draw' => 1,
-            'start' => 0,
-            'length' => 25,
-        ], $params)), ['X-Requested-With' => 'XMLHttpRequest']);
+        return $this->call(
+            'GET',
+            route('payments.index'),
+            array_merge([
+                'draw' => 1,
+                'start' => 0,
+                'length' => 25,
+            ], $params),
+            [],
+            [],
+            [
+                'HTTP_X-Requested-With' => 'XMLHttpRequest',
+                'Accept' => 'application/json',
+            ]
+        );
     }
 
     private function setUpHttpTestExtras(): void

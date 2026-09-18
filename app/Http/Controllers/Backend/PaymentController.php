@@ -90,6 +90,25 @@ class PaymentController extends Controller
 
                 $indexService->applySearchKeyword($query, $keyword);
             })
+            ->order(function ($query) use ($request) {
+                $orderSpec = (array) $request->input('order', []);
+                $firstOrder = $orderSpec[0] ?? null;
+                if (! is_array($firstOrder)) {
+                    return;
+                }
+
+                $columnIndex = (int) ($firstOrder['column'] ?? -1);
+                $direction = strtolower((string) ($firstOrder['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+                $columns = (array) $request->input('columns', []);
+                $columnDef = $columns[$columnIndex] ?? [];
+                $columnName = (string) ($columnDef['name'] ?? $columnDef['data'] ?? '');
+
+                if ($columnName !== 'total_due') {
+                    return;
+                }
+
+                $query->reorder()->orderByRaw('coalesce(total_due, 0) '.$direction);
+            })
             ->rawColumns(['driver', 'total_due_html', 'credit_html', 'actions_html'])
             ->toJson();
     }
