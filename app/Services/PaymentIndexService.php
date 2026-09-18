@@ -52,8 +52,9 @@ class PaymentIndexService
         }
 
         return $query->where(function (Builder $inner) use ($keyword) {
-            $inner->where('first_name', 'like', "%{$keyword}%")
-                ->orWhere('last_name', 'like', "%{$keyword}%")
+            $inner->where(function (Builder $namePostcode) use ($keyword) {
+                DriverKeywordSearch::applyNameAndPostcodeMatch($namePostcode, $keyword);
+            })
                 ->orWhere('phone_number', 'like', "%{$keyword}%")
                 ->orWhere('email', 'like', "%{$keyword}%")
                 ->orWhereHas('agreements', function (Builder $agreementQuery) use ($keyword) {

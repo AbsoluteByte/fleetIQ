@@ -86,6 +86,22 @@ class PaymentsIndexTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_payments_index_search_finds_driver_by_full_name_and_postcode(): void
+    {
+        $target = $this->createDriver('Jane', 'Paysearch', 'paysearch-target@example.com', 'SW1A 1AA');
+        $other = $this->createDriver('Other', 'Driver', 'paysearch-other@example.com', 'M1 1AE');
+        $this->createAgreement($target, $this->createCar('REG001'));
+        $this->createAgreement($other, $this->createCar('REG002'));
+
+        $byFullName = $this->paymentsDatatableResponse(['search' => ['value' => 'Jane Paysearch']]);
+        $byFullName->assertOk();
+        $byFullName->assertJsonCount(1, 'data');
+
+        $byPostcodeCompact = $this->paymentsDatatableResponse(['search' => ['value' => 'SW1A1AA']]);
+        $byPostcodeCompact->assertOk();
+        $byPostcodeCompact->assertJsonCount(1, 'data');
+    }
+
     public function test_payments_index_search_finds_driver_by_active_car_registration(): void
     {
         $driver = $this->createDriver('Search', 'ByReg', 'search-reg@example.com');
@@ -532,13 +548,14 @@ class PaymentsIndexTest extends TestCase
         }
     }
 
-    private function createDriver(string $firstName, string $lastName, string $email): Driver
+    private function createDriver(string $firstName, string $lastName, string $email, ?string $postCode = null): Driver
     {
         return Driver::query()->create([
             'tenant_id' => $this->tenant->id,
             'first_name' => $firstName,
             'last_name' => $lastName,
             'email' => $email,
+            'post_code' => $postCode,
             'is_active' => true,
         ]);
     }
