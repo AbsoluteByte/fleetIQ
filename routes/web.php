@@ -159,6 +159,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         ->name('agreements.esign-status');
     Route::post('agreements/{agreement}/resend-esign', [App\Http\Controllers\Backend\AgreementController::class, 'resendESignature'])
         ->name('agreements.resend-esign');
+    Route::post('agreements/{agreement}/reset-esign', [App\Http\Controllers\Backend\AgreementController::class, 'resetESignature'])
+        ->name('agreements.reset-esign');
     Route::get('agreements/{agreement}/view-signed', [App\Http\Controllers\Backend\AgreementController::class, 'viewSignedDocument'])
         ->name('agreements.view-signed');
     Route::post('agreements/{agreement}/send-client-documents', [App\Http\Controllers\Backend\AgreementController::class, 'sendClientDocumentsEmail'])

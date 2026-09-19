@@ -50,10 +50,21 @@
                 Permission Letter
             </a>
             @if($agreementIsSigned)
-                <span class="btn btn-success disabled" style="pointer-events: none;">
-                    <i class="fa fa-check me-2"></i>
-                    Signed
-                </span>
+                @if($canResetAgreementSignature ?? false)
+                    <form action="{{ route('agreements.reset-esign', $agreement) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-warning"
+                                onclick="return confirm('Remove this signed agreement and allow sending a new signing link? The current signature and signed PDF will be cleared.')">
+                            <i class="fa fa-undo me-2"></i>
+                            Remove Signature
+                        </button>
+                    </form>
+                @else
+                    <span class="btn btn-success disabled" style="pointer-events: none;">
+                        <i class="fa fa-check me-2"></i>
+                        Signed
+                    </span>
+                @endif
             @elseif($agreement->hellosign_status === 'pending')
                 <form action="{{ route('agreements.resend-esign', $agreement) }}" method="POST" class="d-inline">
                     @csrf
@@ -811,6 +822,17 @@
                                     <i class="fa fa-download me-1"></i>
                                     Download Signed PDF
                                 </a>
+
+                                @if($canResetAgreementSignature ?? false)
+                                    <form action="{{ route('agreements.reset-esign', $agreement) }}" method="POST">
+                                        @csrf
+                                        <button type="submit" class="btn btn-outline-warning btn-sm w-100"
+                                                onclick="return confirm('Remove signature and signed PDF so you can send a new signing link?')">
+                                            <i class="fa fa-undo me-1"></i>
+                                            Remove Signature
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
                         @endif
 

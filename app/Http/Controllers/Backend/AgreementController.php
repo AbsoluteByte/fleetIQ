@@ -20,6 +20,8 @@ use App\Services\AgreementDepositSettlementService;
 use App\Services\AgreementIndexService;
 use App\Services\AgreementInvoiceService;
 use App\Services\AgreementPdfService;
+use App\Services\AgreementESignAuthorizationService;
+use App\Services\AgreementSignatureResetService;
 use App\Services\AgreementUpgradeService;
 use App\Services\CarFleetRentStatusService;
 use App\Services\DriverAgreementStatusService;
@@ -424,9 +426,18 @@ class AgreementController extends Controller
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         [$settlementPreview, $settlementRemainingDebt] = $this->settlementContextForAgreement($agreement);
         $canManageInvoices = strtolower(trim((string) Auth::user()?->email)) === 'jawad@samoretraders.com';
+        $canResetAgreementSignature = app(AgreementESignAuthorizationService::class)->canResetSignedAgreement();
         $latestSignatureToken = $agreement->getLatestSignatureToken();
 
-        return view($this->dir.'show', compact('agreement', 'bankAccounts', 'settlementPreview', 'settlementRemainingDebt', 'canManageInvoices', 'latestSignatureToken'));
+        return view($this->dir.'show', compact(
+            'agreement',
+            'bankAccounts',
+            'settlementPreview',
+            'settlementRemainingDebt',
+            'canManageInvoices',
+            'canResetAgreementSignature',
+            'latestSignatureToken'
+        ));
     }
 
     public function renew(Agreement $agreement)
@@ -2254,6 +2265,11 @@ class AgreementController extends Controller
                 ->with('warning', 'Agreement already sent for signature.');
         }
 
+        if ($agreement->hellosign_status === 'signed') {
+            return redirect()->back()
+                ->with('warning', 'This agreement is already signed. Remove the signature first if you need to send it again.');
+        }
+
         if (! $agreement->driver || ! $agreement->driver->email) {
             return redirect()->back()
                 ->with('error', 'Driver email is required for e-signature.');
@@ -2490,6 +2506,35 @@ class AgreementController extends Controller
 
         return redirect()->back()
             ->with('info', '⏳ Signature is pending. Waiting for driver to sign.');
+    }
+
+    public function resetESignature(
+        Agreement $agreement,
+        AgreementESignAuthorizationService $authorizationService,
+        AgreementSignatureResetService $resetService
+    ) {
+        $tenant = Auth::user()->currentTenant();
+
+        if ($agreement->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized access');
+        }
+
+        if (! $authorizationService->canResetSignedAgreement()) {
+            abort(403, 'You are not allowed to remove agreement signatures.');
+        }
+
+        $isSigned = $agreement->hellosign_status === 'signed'
+            || $agreement->signedSignatureToken() !== null;
+
+        if (! $isSigned) {
+            return redirect()->back()
+                ->with('warning', 'This agreement is not signed. Nothing to remove.');
+        }
+
+        $resetService->reset($agreement);
+
+        return redirect()->route('agreements.show', $agreement)
+            ->with('success', 'Signature removed. You can send the agreement for signing again.');
     }
 
     /**
