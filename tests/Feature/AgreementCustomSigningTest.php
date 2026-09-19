@@ -10,6 +10,7 @@ use App\Models\Driver;
 use App\Models\Status;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\AgreementESignAuthorizationService;
 use App\Services\AgreementPdfService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
@@ -297,6 +298,61 @@ class AgreementCustomSigningTest extends TestCase
             'signature' => self::SIGNATURE_PNG,
             'signature_method' => 'draw',
         ])->assertStatus(400);
+    }
+
+    public function test_jawad_can_reset_signed_agreement_and_send_again(): void
+    {
+        $jawad = User::factory()->create([
+            'email' => AgreementESignAuthorizationService::RESET_SIGNED_ALLOWED_EMAIL,
+        ]);
+        $jawad->tenants()->attach($this->tenant->id, [
+            'role' => 'admin',
+            'is_primary' => true,
+            'joined_at' => now(),
+        ]);
+        $this->actingAs($jawad);
+        $jawad->switchTenant($this->tenant->id);
+
+        $token = $this->createPendingToken();
+        app(\App\Services\CustomSigningService::class)->processSignature(
+            $token,
+            self::SIGNATURE_PNG,
+            '127.0.0.1',
+            ['signature_method' => 'draw']
+        );
+        $this->agreement->refresh();
+        $this->assertSame('signed', $this->agreement->hellosign_status);
+
+        $response = $this->post(route('agreements.reset-esign', $this->agreement));
+        $response->assertRedirect(route('agreements.show', $this->agreement));
+        $response->assertSessionHas('success');
+
+        $this->agreement->refresh();
+        $this->assertNull($this->agreement->hellosign_status);
+        $this->assertNull($this->agreement->esign_document_path);
+        $this->assertNull($this->agreement->signedSignatureToken());
+
+        Mail::fake();
+        $sendResponse = $this->post(route('agreements.send-esign', $this->agreement));
+        $sendResponse->assertRedirect(route('agreements.show', $this->agreement));
+        $this->assertSame('pending', $this->agreement->fresh()->hellosign_status);
+    }
+
+    public function test_non_jawad_cannot_reset_signed_agreement(): void
+    {
+        $token = $this->createPendingToken();
+        app(\App\Services\CustomSigningService::class)->processSignature(
+            $token,
+            self::SIGNATURE_PNG,
+            '127.0.0.1',
+            ['signature_method' => 'draw']
+        );
+
+        $response = $this->post(route('agreements.reset-esign', $this->agreement));
+
+        $response->assertForbidden();
+        $this->agreement->refresh();
+        $this->assertSame('signed', $this->agreement->hellosign_status);
     }
 
     /**
