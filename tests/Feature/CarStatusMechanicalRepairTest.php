@@ -66,6 +66,32 @@ class CarStatusMechanicalRepairTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_store_mechanical_repair_accepts_only_issue_reported_date(): void
+    {
+        $car = $this->createCar('MECH000', Car::FLEET_STATUS_AVAILABLE_FOR_RENT);
+
+        $response = $this->post(route('car-status.store'), [
+            'car_id' => $car->id,
+            'target_status' => Car::FLEET_STATUS_MECHANICAL_REPAIR,
+            'payload' => [
+                'issue_reported_date' => '2026-09-01',
+            ],
+        ]);
+
+        $response->assertRedirect(route('cars.show', $car));
+
+        $history = CarStatusHistory::query()
+            ->where('car_id', $car->id)
+            ->where('new_status', Car::FLEET_STATUS_MECHANICAL_REPAIR)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame('2026-09-01', $history->status_data['issue_reported_date']);
+        $this->assertNull($history->status_data['issue_details'] ?? null);
+        $this->assertNull($history->status_data['allocation_date'] ?? null);
+        $this->assertNull($history->status_data['allocated_to'] ?? null);
+    }
+
     public function test_store_applies_mechanical_repair_and_records_intake_fields(): void
     {
         $car = $this->createCar('MECH001', Car::FLEET_STATUS_AVAILABLE_FOR_RENT);
