@@ -376,6 +376,48 @@ class Car extends Model
         return $this->currentActiveInsurance() !== null;
     }
 
+    public function latestInsuranceForList(): ?CarInsurance
+    {
+        return $this->insurances
+            ->sortByDesc(fn (CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
+            ->first();
+    }
+
+    public function insuranceListStatusLabel(): string
+    {
+        $statusName = trim((string) optional(optional($this->latestInsuranceForList())->status)->name);
+        if (strcasecmp($statusName, 'Applied') === 0) {
+            return 'Applied';
+        }
+        if (strcasecmp($statusName, 'Active') === 0) {
+            return 'Active';
+        }
+
+        return 'Inactive';
+    }
+
+    public function insuranceStatusDateForListLabel(?string $label = null): ?\Illuminate\Support\Carbon
+    {
+        $insurance = $this->latestInsuranceForList();
+        if (! $insurance) {
+            return null;
+        }
+
+        $label = $label ?? $this->insuranceListStatusLabel();
+
+        if (strcasecmp($label, 'Applied') === 0) {
+            return $insurance->applied_date;
+        }
+        if (strcasecmp($label, 'Active') === 0) {
+            return $insurance->start_date;
+        }
+        if (strcasecmp($label, 'Inactive') === 0) {
+            return $insurance->canceled_date;
+        }
+
+        return null;
+    }
+
     public function latestMot(): ?CarMot
     {
         return $this->mots

@@ -25,11 +25,14 @@
                                 $insuranceReportRequested = filled($insuranceFrom) || filled($insuranceTo);
                                 $ticketReportRequested = filled($ticketCarId ?? null) || filled($ticketAt ?? null);
                                 $reconciliationRequested = ($reconciliation ?? null) !== null || filled($reconciliationError ?? null);
+                                $vehiclePlReportRequested = filled($plCarId ?? null) || filled($plDateError ?? null);
                                 $activeMainTab = $reconciliationRequested
                                     ? 'reconciliation'
-                                    : ($ticketReportRequested
-                                        ? 'ticket'
-                                        : ($insuranceReportRequested ? 'insurance' : 'mots'));
+                                    : ($vehiclePlReportRequested
+                                        ? 'vehicle_pl'
+                                        : ($ticketReportRequested
+                                            ? 'ticket'
+                                            : ($insuranceReportRequested ? 'insurance' : 'mots')));
                                 $ticketAtInputValue = filled($ticketAt ?? null)
                                     ? \Carbon\Carbon::parse($ticketAt)->format('Y-m-d\TH:i')
                                     : '';
@@ -51,6 +54,9 @@
                                 </li>
                                 <li class="nav-item">
                                     <a class="nav-link {{ $activeMainTab === 'reconciliation' ? 'active' : '' }}" id="reports-reconciliation-tab" data-toggle="pill" href="#reports-reconciliation-pane" role="tab" aria-controls="reports-reconciliation-pane" aria-selected="{{ $activeMainTab === 'reconciliation' ? 'true' : 'false' }}">Insurance Reconciliation</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link {{ $activeMainTab === 'vehicle_pl' ? 'active' : '' }}" id="reports-vehicle-pl-tab" data-toggle="pill" href="#reports-vehicle-pl-pane" role="tab" aria-controls="reports-vehicle-pl-pane" aria-selected="{{ $activeMainTab === 'vehicle_pl' ? 'true' : 'false' }}">Vehicle P/L</a>
                                 </li>
                             </ul>
 
@@ -363,6 +369,10 @@
                                     @else
                                         @include('backend.reports.partials.insurance-reconciliation-results', ['reconciliation' => $reconciliation])
                                     @endif
+                                </div>
+
+                                <div class="tab-pane fade {{ $activeMainTab === 'vehicle_pl' ? 'show active' : '' }}" id="reports-vehicle-pl-pane" role="tabpanel" aria-labelledby="reports-vehicle-pl-tab">
+                                    @include('backend.reports.partials.vehicle-profit-loss')
                                 </div>
                             </div>
                         </div>
@@ -681,7 +691,7 @@
                 $('#reportsExportGroup').toggle(isVisible);
             }
 
-            if (activeReportTab === 'ticket' || activeReportTab === 'reconciliation') {
+            if (activeReportTab === 'ticket' || activeReportTab === 'reconciliation' || activeReportTab === 'vehicle_pl') {
                 setReportsExportVisible(false);
             }
 
@@ -928,6 +938,9 @@
                     setReportsExportVisible(false);
                 } else if (href === '#reports-reconciliation-pane') {
                     activeReportTab = 'reconciliation';
+                    setReportsExportVisible(false);
+                } else if (href === '#reports-vehicle-pl-pane') {
+                    activeReportTab = 'vehicle_pl';
                     setReportsExportVisible(false);
                 } else {
                     activeReportTab = 'mots';
