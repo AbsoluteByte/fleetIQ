@@ -151,6 +151,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('agreements/{agreement}/pdf/preview', [App\Http\Controllers\Backend\AgreementController::class, 'previewPDF'])->name('agreements.pdf.preview');
     Route::get('agreements/{agreement}/permission-letter', [App\Http\Controllers\Backend\AgreementController::class, 'permissionLetterPDF'])->name('agreements.permission-letter');
     Route::get('agreements/{agreement}/financial-summary', [App\Http\Controllers\Backend\AgreementController::class, 'financialSummaryPDF'])->name('agreements.financial-summary');
+    Route::get('agreements/{agreement}/car-rental-invoice', [App\Http\Controllers\Backend\AgreementCarRentalInvoiceController::class, 'show'])->name('agreements.car-rental-invoice.show');
+    Route::post('agreements/{agreement}/car-rental-invoice', [App\Http\Controllers\Backend\AgreementCarRentalInvoiceController::class, 'store'])->name('agreements.car-rental-invoice.store');
 
     // Inside admin prefix group
     Route::post('agreements/{agreement}/send-esign', [App\Http\Controllers\Backend\AgreementController::class, 'sendForESignature'])

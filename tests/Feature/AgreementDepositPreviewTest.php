@@ -84,6 +84,7 @@ class AgreementDepositPreviewTest extends TestCase
     {
         Schema::dropIfExists('bank_accounts');
         Schema::dropIfExists('deposit_refunds');
+        Schema::dropIfExists('agreement_additional_charges');
         Schema::dropIfExists('agreement_deductions');
         Schema::dropIfExists('agreement_collections');
         Schema::dropIfExists('car_status_histories');
@@ -139,6 +140,15 @@ class AgreementDepositPreviewTest extends TestCase
         $response->assertJsonFragment(['gross_deposit_amount' => 300.0]);
         $response->assertJsonFragment(['driver_outstanding_amount' => 50.0]);
         $response->assertJsonFragment(['refund_amount' => 250.0]);
+    }
+
+    public function test_agreement_show_refund_button_includes_deposit_settlement_preview_url(): void
+    {
+        $contents = file_get_contents(resource_path('views/backend/agreements/show.blade.php'));
+
+        $this->assertIsString($contents);
+        $this->assertStringContainsString('data-preview-url="{{ route(\'agreements.deposit-settlement-preview\', $agreement) }}"', $contents);
+        $this->assertStringContainsString('data-refund-deposit-btn', $contents);
     }
 
     private function setUpHttpTestExtras(): void
@@ -201,6 +211,36 @@ class AgreementDepositPreviewTest extends TestCase
                 $table->text('notes')->nullable();
                 $table->unsignedInteger('sort_order')->default(0);
                 $table->foreignId('created_by')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('agreement_additional_charges')) {
+            Schema::create('agreement_additional_charges', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tenant_id');
+                $table->foreignId('agreement_id');
+                $table->string('type');
+                $table->decimal('amount', 12, 2);
+                $table->text('notes')->nullable();
+                $table->foreignId('invoice_id')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('agreement_collections')) {
+            Schema::create('agreement_collections', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('agreement_id');
+                $table->date('date');
+                $table->date('due_date')->nullable();
+                $table->string('method');
+                $table->decimal('amount', 10, 2);
+                $table->string('payment_status')->default('pending');
+                $table->decimal('amount_paid', 10, 2)->default(0);
+                $table->date('payment_date')->nullable();
+                $table->text('notes')->nullable();
+                $table->boolean('is_auto_generated')->default(false);
                 $table->timestamps();
             });
         }

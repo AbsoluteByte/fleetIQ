@@ -113,6 +113,11 @@ class Agreement extends Model
             ->whereIn('invoice_type', ['agreement', 'agreement_deposit', 'agreement_additional_charge']);
     }
 
+    public function carRentalInvoice()
+    {
+        return $this->hasOne(AgreementCarRentalInvoice::class);
+    }
+
     public function discountConsumedInvoice()
     {
         return $this->belongsTo(Invoice::class, 'discount_consumed_invoice_id');

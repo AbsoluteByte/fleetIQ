@@ -61,6 +61,7 @@
                                         <th>Status</th>
                                         <th>PHV Council</th>
                                         <th>Insurance Status</th>
+                                        <th class="cars-insurance-status-date-col">Insurance Status Date</th>
                                         <th class="cars-available-from-col">Available From</th>
                                         <th>Actions</th>
                                         <th>VIN</th>
@@ -73,13 +74,9 @@
                                             $isAvailableByPhv = $car->isSelectableForAgreement($rentedCarIds ?? []);
                                             $isAwaitingPhv = $car->phvs->isEmpty();
                                             $isAwaitingLogBook = $car->log_book_applied && $car->v5DocumentFileNames() === [];
-                                            $latestInsurance = $car->insurances
-                                                ->sortByDesc(fn (\App\Models\CarInsurance $i) => [optional($i->created_at)->timestamp ?? 0, $i->id])
-                                                ->first();
-                                            $latestInsuranceStatusName = trim((string) optional(optional($latestInsurance)->status)->name);
-                                            $insuranceStatusLabel = strcasecmp($latestInsuranceStatusName, 'Applied') === 0
-                                                ? 'Applied'
-                                                : (strcasecmp($latestInsuranceStatusName, 'Active') === 0 ? 'Active' : 'Inactive');
+                                            $insuranceStatusLabel = $car->insuranceListStatusLabel();
+                                            $insuranceStatusDate = $car->insuranceStatusDateForListLabel($insuranceStatusLabel);
+                                            $insuranceStatusDateIso = $insuranceStatusDate?->format('Y-m-d') ?? '';
                                             $phvCounselLabel = in_array($car->fleet_status ?? '', [
                                                 \App\Models\Car::FLEET_STATUS_WRITTEN_OFF,
                                                 \App\Models\Car::FLEET_STATUS_STOLEN,
@@ -113,6 +110,7 @@
                                             data-awaiting-log-book="{{ $isAwaitingLogBook ? '1' : '0' }}"
                                             data-council="{{ $phvCounselLabel }}"
                                             data-insurance-status="{{ $insuranceStatusLabel }}"
+                                            data-insurance-status-date="{{ $insuranceStatusDateIso }}"
                                             data-mot-expiry="{{ $motExpiryIso }}"
                                             data-mot-missing="{{ $motExpiryIso === '' ? '1' : '0' }}"
                                             data-road-tax-expiry="{{ $roadTaxExpiryIso }}"
@@ -156,6 +154,9 @@
                                                         <span class="insurance-status-label">Inactive</span>
                                                     </span>
                                                 @endif
+                                            </td>
+                                            <td class="cars-insurance-status-date-col">
+                                                {{ $insuranceStatusDate ? $insuranceStatusDate->format('d M Y') : '—' }}
                                             </td>
                                             <td class="cars-available-from-col">
                                                 {{ $terminationAvailableFromIso ? \Carbon\Carbon::parse($terminationAvailableFromIso)->format('d M Y') : '—' }}
@@ -215,7 +216,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="10" class="text-center text-muted py-4">
+                                            <td colspan="11" class="text-center text-muted py-4">
                                                 <i class="fa fa-car fa-3x mb-3"></i>
                                                 <br>
                                                 No cars found. <a href="{{ route('cars.create') }}">Add your first car</a>
@@ -785,7 +786,8 @@
             const terminationNoticeFilter = { from: '', to: '' };
             const manufactureYearFilter = { from: '', to: '' };
             let manufactureYearToManuallyEdited = false;
-            const availableFromColumnIndex = 7;
+            const insuranceStatusDateColumnIndex = 7;
+            const availableFromColumnIndex = 8;
             const quickFilterLabels = {
                 available_by_phv: 'Available by PHV',
                 on_rent: 'On Rent',
@@ -817,6 +819,7 @@
                 processing: true,
                 responsive: true,
                 columnDefs: [
+                    { targets: insuranceStatusDateColumnIndex, visible: false },
                     { targets: availableFromColumnIndex, visible: false },
                     { targets: -1, visible: false, searchable: true }
                 ],
@@ -912,6 +915,10 @@
                 terminationNoticeFilter.to = document.getElementById('carsTerminationNoticeTo').value;
             }
 
+            function isInsuranceStatusFilterActive() {
+                return !!advancedFilters.insuranceStatus;
+            }
+
             function isTerminationNoticeFilterActive() {
                 return !!(terminationNoticeFilter.from || terminationNoticeFilter.to);
             }
@@ -969,11 +976,16 @@
                 return true;
             }
 
+            function toggleInsuranceStatusDateColumn(show) {
+                dataTable.column(insuranceStatusDateColumnIndex).visible(show);
+            }
+
             function toggleAvailableFromColumn(show) {
                 dataTable.column(availableFromColumnIndex).visible(show);
             }
 
             function drawCarsTable() {
+                toggleInsuranceStatusDateColumn(isInsuranceStatusFilterActive());
                 toggleAvailableFromColumn(isTerminationNoticeFilterActive());
                 dataTable.draw();
             }
@@ -1081,7 +1093,7 @@
 
             $('.cars-advanced-filter').on('change', function () {
                 advancedFilters[$(this).data('filter-key')] = this.value;
-                dataTable.draw();
+                drawCarsTable();
             });
 
             $('#carsFilterAwaitingLogBook').on('change', function () {
@@ -1238,9 +1250,15 @@
 
             function getCarsExportHeaders() {
                 const headers = carsExportHeaders.slice();
+                let insertAt = 7;
+
+                if (isInsuranceStatusFilterActive()) {
+                    headers.splice(insertAt, 0, 'Insurance Status Date');
+                    insertAt++;
+                }
 
                 if (isTerminationNoticeFilterActive()) {
-                    headers.splice(7, 0, 'Available From');
+                    headers.splice(insertAt, 0, 'Available From');
                 }
 
                 return headers;
@@ -1372,13 +1390,18 @@
                         row.push(cells[i].innerText.replace(/\s+/g, ' ').trim());
                     }
 
+                    let insertAt = 7;
+                    if (isInsuranceStatusFilterActive()) {
+                        row.splice(insertAt, 0, formatDisplayDate(node.dataset.insuranceStatusDate || '') || '—');
+                        insertAt++;
+                    }
+                    if (isTerminationNoticeFilterActive()) {
+                        row.splice(insertAt, 0, formatDisplayDate(node.dataset.terminationAvailableFrom || '') || '—');
+                    }
+
                     row.push(formatDisplayDate(node.dataset.motExpiry || ''));
                     row.push(formatDisplayDate(node.dataset.roadTaxExpiry || ''));
                     row.push(formatDisplayDate(node.dataset.phvExpiry || ''));
-
-                    if (isTerminationNoticeFilterActive()) {
-                        row.splice(7, 0, formatDisplayDate(node.dataset.terminationAvailableFrom || '') || '—');
-                    }
 
                     rows.push(row);
                 });

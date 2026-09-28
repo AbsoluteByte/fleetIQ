@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agreement;
+use App\Models\AgreementCarRentalInvoice;
 use Barryvdh\DomPDF\PDF as DomPdfInstance;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\File;
@@ -164,6 +165,22 @@ class AgreementPdfService
 
         $driverName = str_replace(' ', '_', $agreement->driver?->full_name ?? 'Driver');
         $filename = 'Agreement_Financial_'.$agreement->id.'_'.$driverName.'.pdf';
+
+        return [$pdf, $filename];
+    }
+
+    /**
+     * @return array{0: DomPdfInstance, 1: string}
+     */
+    public function makeCarRentalInvoicePdf(AgreementCarRentalInvoice $record): array
+    {
+        $data = app(AgreementCarRentalInvoiceService::class)->pdfViewData($record);
+        $pdf = PDF::loadView('backend.agreements.car_rental_invoice_pdf', $data);
+        $pdf->setPaper('A4', 'portrait');
+
+        $companySlug = str_replace(' ', '_', preg_replace('/[^a-zA-Z0-9\s]/', '', (string) ($data['company']?->name ?? 'Company')) ?? 'Company');
+        $driverName = str_replace(' ', '_', $data['driver']?->full_name ?? 'Driver');
+        $filename = trim($companySlug, '_').'_Car_Rental_Invoice_'.$driverName.'.pdf';
 
         return [$pdf, $filename];
     }

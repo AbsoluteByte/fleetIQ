@@ -102,6 +102,10 @@
                     Export Financial
                 </a>
             @endif
+            <a href="{{ route('agreements.car-rental-invoice.show', $agreement) }}" class="btn btn-outline-info">
+                <i class="fa fa-file-text-o me-2"></i>
+                Car Rental Invoice
+            </a>
             @if(!empty($agreement->driver?->email))
             <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
                 @csrf
@@ -145,13 +149,8 @@
                             data-toggle="modal"
                             data-target="#refundDepositModal"
                             data-refund-deposit-btn
-                            data-action="{{ route('agreements.refund-deposit', $agreement) }}"
-                            data-amount="{{ number_format((float) ($settlementPreview['refund_amount'] ?? 0), 2, '.', '') }}"
-                            data-gross-deposit="{{ number_format((float) ($settlementPreview['gross_deposit_amount'] ?? 0), 2, '.', '') }}"
-                            data-deductions="{{ number_format((float) ($settlementPreview['deductions_amount'] ?? 0), 2, '.', '') }}"
-                            data-driver-outstanding="{{ number_format((float) ($settlementPreview['driver_outstanding_amount'] ?? 0), 2, '.', '') }}"
-                            data-debt-offset="{{ number_format((float) ($settlementPreview['debt_offset_amount'] ?? 0), 2, '.', '') }}"
-                            data-remaining-debt="{{ number_format((float) ($settlementPreview['remaining_debt_amount'] ?? 0), 2, '.', '') }}">
+                            data-preview-url="{{ route('agreements.deposit-settlement-preview', $agreement) }}"
+                            data-action="{{ route('agreements.refund-deposit', $agreement) }}">
                         <i class="fa fa-undo me-2"></i>
                         Refund Deposit
                     </button>

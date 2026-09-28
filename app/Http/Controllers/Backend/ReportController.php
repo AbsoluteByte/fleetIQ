@@ -11,10 +11,13 @@ use App\Models\InsuranceProvider;
 use App\Services\InsuranceDateRangeReportService;
 use App\Services\InsuranceReconciliationService;
 use App\Services\TicketTrackingReportService;
+use App\Services\VehicleProfitLossReportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use PDF;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
@@ -24,6 +27,7 @@ class ReportController extends Controller
         private readonly InsuranceDateRangeReportService $insuranceReportService,
         private readonly TicketTrackingReportService $ticketTrackingService,
         private readonly InsuranceReconciliationService $insuranceReconciliationService,
+        private readonly VehicleProfitLossReportService $vehicleProfitLossReportService,
     ) {
         $this->middleware('role:admin|manager|user');
         view()->share('dir', $this->dir);
@@ -38,12 +42,25 @@ class ReportController extends Controller
                 ->with('error', 'No active company found! Please contact administrator.');
         }
 
-        return view($this->dir.'index', $this->reportsIndexData($request, $tenant->id) + [
+        $data = $this->reportsIndexData($request, $tenant->id) + [
             'reconciliation' => null,
             'reconciliationError' => null,
             'reconciliationFrom' => null,
             'reconciliationTo' => null,
-        ]);
+        ];
+
+        $export = (string) $request->query('export', '');
+        $vehicleReport = $data['vehicleProfitLossReport'] ?? null;
+
+        if ($export === 'pl_csv' && is_array($vehicleReport) && empty($vehicleReport['error'])) {
+            return $this->vehicleProfitLossCsvResponse($vehicleReport);
+        }
+
+        if ($export === 'pl_pdf' && is_array($vehicleReport) && empty($vehicleReport['error'])) {
+            return $this->vehicleProfitLossPdfResponse($vehicleReport);
+        }
+
+        return view($this->dir.'index', $data);
     }
 
     public function runInsuranceReconciliation(Request $request)
@@ -218,6 +235,63 @@ class ReportController extends Controller
             }
         }
 
+        $plCarId = $request->filled('pl_car_id') ? (int) $request->query('pl_car_id') : null;
+        $plFrom = $request->query('pl_from');
+        $plTo = $request->query('pl_to');
+        $plPosting = (string) $request->query('pl_posting', VehicleProfitLossReportService::POSTING_ALL);
+        if (! in_array($plPosting, [
+            VehicleProfitLossReportService::POSTING_ALL,
+            VehicleProfitLossReportService::POSTING_POSTED,
+            VehicleProfitLossReportService::POSTING_PENDING,
+        ], true)) {
+            $plPosting = VehicleProfitLossReportService::POSTING_ALL;
+        }
+
+        [$plFromCarbon, $plToCarbon, $plDateError] = $this->vehicleProfitLossReportService->parseDateRange(
+            is_string($plFrom) ? $plFrom : null,
+            is_string($plTo) ? $plTo : null
+        );
+
+        $vehicleProfitLossReport = null;
+        $plReportReady = false;
+
+        if ($plCarId) {
+            $plCar = $cars->firstWhere('id', $plCarId);
+            if ($plCar instanceof Car) {
+                $vehicleProfitLossReport = $this->vehicleProfitLossReportService->build(
+                    $plCar,
+                    $tenantId,
+                    $plFromCarbon,
+                    $plToCarbon,
+                    $plPosting
+                );
+                $plReportReady = $plDateError === null && empty($vehicleProfitLossReport['error']);
+            } else {
+                $vehicleProfitLossReport = [
+                    'car' => null,
+                    'from' => $plFromCarbon,
+                    'to' => $plToCarbon,
+                    'posting_filter' => $plPosting,
+                    'lines' => [],
+                    'summary' => $this->vehicleProfitLossReportService->summarize([]),
+                    'error' => 'The selected vehicle is not valid.',
+                ];
+            }
+        }
+
+        if ($plDateError) {
+            $vehicleProfitLossReport = $vehicleProfitLossReport ?? [
+                'car' => null,
+                'from' => null,
+                'to' => null,
+                'posting_filter' => $plPosting,
+                'lines' => [],
+                'summary' => $this->vehicleProfitLossReportService->summarize([]),
+                'error' => $plDateError,
+            ];
+            $plReportReady = false;
+        }
+
         return compact(
             'cars',
             'insuranceFrom',
@@ -240,7 +314,65 @@ class ReportController extends Controller
             'ticketTrackingReady',
             'ticketTrackingQueriedAt',
             'ticketCars',
+            'plCarId',
+            'plFrom',
+            'plTo',
+            'plPosting',
+            'plDateError',
+            'plReportReady',
+            'vehicleProfitLossReport',
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $report
+     */
+    private function vehicleProfitLossCsvResponse(array $report): StreamedResponse
+    {
+        $registration = $report['car']?->registration ?? 'vehicle';
+        $filename = 'vehicle-pl-'.preg_replace('/[^A-Za-z0-9_-]+/', '_', $registration).'.csv';
+
+        return response()->streamDownload(function () use ($report) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['Date', 'Direction', 'Category', 'Description', 'Amount', 'Status', 'Source']);
+
+            foreach ($report['lines'] as $line) {
+                fputcsv($handle, [
+                    $line['date'] ?? '',
+                    $line['direction'] ?? '',
+                    $line['category_label'] ?? '',
+                    $line['description'] ?? '',
+                    number_format((float) ($line['amount'] ?? 0), 2, '.', ''),
+                    $line['posting_status'] ?? '—',
+                    $line['source_label'] ?? '',
+                ]);
+            }
+
+            fputcsv($handle, []);
+            $summary = $report['summary'] ?? [];
+            foreach ($summary as $key => $value) {
+                fputcsv($handle, [$key, number_format((float) $value, 2, '.', '')]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $report
+     */
+    private function vehicleProfitLossPdfResponse(array $report)
+    {
+        $pdf = PDF::loadView('backend.reports.vehicle_profit_loss_pdf', [
+            'report' => $report,
+        ])->setPaper('a4', 'portrait');
+
+        $registration = $report['car']?->registration ?? 'vehicle';
+        $filename = 'vehicle-pl-'.preg_replace('/[^A-Za-z0-9_-]+/', '_', $registration).'.pdf';
+
+        return $pdf->download($filename);
     }
 
     private function latestMotForCar(Car $car): ?CarMot
