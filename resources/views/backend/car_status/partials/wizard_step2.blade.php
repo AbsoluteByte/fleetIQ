@@ -415,7 +415,7 @@
                 @enderror
             </div>
             <div class="col-md-6 form-group">
-                <label for="fleet_mech_allocation_date">Allocation date <span class="text-danger">*</span></label>
+                <label for="fleet_mech_allocation_date">Allocation date</label>
                 <input type="date" name="payload[allocation_date]" id="fleet_mech_allocation_date"
                        class="form-control @error('payload.allocation_date') is-invalid @enderror"
                        value="{{ $payloadDateOld('allocation_date') }}">
@@ -424,7 +424,7 @@
                 @enderror
             </div>
             <div class="col-md-6 form-group">
-                <label for="fleet_mech_allocated_to">Allocated to <span class="text-danger">*</span></label>
+                <label for="fleet_mech_allocated_to">Allocated to</label>
                 <input type="text" name="payload[allocated_to]" id="fleet_mech_allocated_to"
                        class="form-control @error('payload.allocated_to') is-invalid @enderror"
                        maxlength="255" value="{{ $payloadOld('allocated_to') }}"
@@ -434,7 +434,7 @@
                 @enderror
             </div>
             <div class="col-md-12 form-group">
-                <label for="fleet_mech_issue_details">Issue / fault details <span class="text-danger">*</span></label>
+                <label for="fleet_mech_issue_details">Issue / fault details</label>
                 <textarea name="payload[issue_details]" id="fleet_mech_issue_details" rows="3"
                           class="form-control @error('payload.issue_details') is-invalid @enderror"
                           placeholder="What is wrong with the vehicle">{{ $payloadOld('issue_details') }}</textarea>

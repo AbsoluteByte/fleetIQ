@@ -385,9 +385,9 @@ class CarStatusChangeService
     {
         $validated = $request->validate([
             'payload.issue_reported_date' => 'required|date',
-            'payload.issue_details' => 'required|string',
-            'payload.allocation_date' => 'required|date',
-            'payload.allocated_to' => 'required|string|max:255',
+            'payload.issue_details' => 'nullable|string',
+            'payload.allocation_date' => 'nullable|date',
+            'payload.allocated_to' => 'nullable|string|max:255',
             'payload.repair_progress_notes' => 'nullable|string',
             'payload.completed_date' => 'nullable|date',
             'payload.completion_notes' => 'nullable|string',
@@ -403,9 +403,9 @@ class CarStatusChangeService
     {
         $validated = $request->validate([
             'payload.issue_reported_date' => 'required|date',
-            'payload.issue_details' => 'required|string',
-            'payload.allocation_date' => 'required|date',
-            'payload.allocated_to' => 'required|string|max:255',
+            'payload.issue_details' => 'nullable|string',
+            'payload.allocation_date' => 'nullable|date',
+            'payload.allocated_to' => 'nullable|string|max:255',
             'payload.repair_progress_notes' => 'nullable|string',
             'payload.completed_date' => 'nullable|date',
             'payload.completion_notes' => 'nullable|string',
@@ -434,14 +434,16 @@ class CarStatusChangeService
      */
     private function normalizeMechanicalRepairPayload(array $payload): array
     {
-        foreach (['repair_progress_notes', 'completion_notes'] as $key) {
+        foreach (['repair_progress_notes', 'completion_notes', 'issue_details', 'allocated_to'] as $key) {
             if (($payload[$key] ?? '') === '') {
                 $payload[$key] = null;
             }
         }
 
-        if (($payload['completed_date'] ?? '') === '') {
-            $payload['completed_date'] = null;
+        foreach (['completed_date', 'allocation_date'] as $key) {
+            if (($payload[$key] ?? '') === '') {
+                $payload[$key] = null;
+            }
         }
 
         return $payload;
