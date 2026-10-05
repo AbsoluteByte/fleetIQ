@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Car;
+use App\Models\CarInsurance;
 use App\Models\CarMot;
 use App\Models\CarPhv;
 use App\Models\CarReservationPayment;
@@ -22,6 +23,10 @@ class VehicleProfitLossReportService
     public const POSTING_POSTED = 'posted';
 
     public const POSTING_PENDING = 'pending';
+
+    private const INSURANCE_COUNT_FROM = '2026-10-01';
+
+    private const INSURANCE_DAYS_IN_YEAR = 365;
 
     /**
      * @return array{
@@ -55,6 +60,7 @@ class VehicleProfitLossReportService
             ->merge($this->motLines($car))
             ->merge($this->phvLines($car))
             ->merge($this->roadTaxLines($car))
+            ->merge($this->insuranceLines($car, $from, $to))
             ->merge($this->expenseLines($car, $tenantId));
 
         $lines = $lines
@@ -444,6 +450,94 @@ class VehicleProfitLossReportService
                 sourceLabel: 'Tax #'.$tax->id,
                 sortKey: 'tax-'.$tax->id,
             ));
+    }
+
+    private function insuranceLines(Car $car, ?Carbon $from, ?Carbon $to): Collection
+    {
+        if (! Schema::hasTable('car_insurances')
+            || ! Schema::hasTable('insurance_providers')
+            || ! Schema::hasColumn('car_insurances', 'start_date')
+            || ! Schema::hasColumn('car_insurances', 'insurance_provider_id')
+            || ! Schema::hasColumn('insurance_providers', 'amount')) {
+            return collect();
+        }
+
+        $today = now()->startOfDay();
+        $cutoff = Carbon::parse(self::INSURANCE_COUNT_FROM)->startOfDay();
+
+        return CarInsurance::query()
+            ->where('car_id', $car->id)
+            ->with('insuranceProvider')
+            ->get()
+            ->map(function (CarInsurance $policy) use ($from, $to, $today, $cutoff) {
+                $annual = (float) ($policy->insuranceProvider?->amount ?? 0);
+                if ($annual <= 0 || ! $policy->start_date) {
+                    return null;
+                }
+
+                $coverStart = $policy->start_date->copy()->startOfDay();
+                $coverEnd = $this->insuranceCoverEnd($policy, $today);
+                if ($coverEnd->lt($coverStart)) {
+                    return null;
+                }
+
+                $billStart = $coverStart->copy();
+                if ($billStart->lt($cutoff)) {
+                    $billStart = $cutoff->copy();
+                }
+                if ($from && $billStart->lt($from->copy()->startOfDay())) {
+                    $billStart = $from->copy()->startOfDay();
+                }
+
+                $billEnd = $coverEnd->copy();
+                if ($billEnd->gt($today)) {
+                    $billEnd = $today->copy();
+                }
+                if ($to && $billEnd->gt($to->copy()->startOfDay())) {
+                    $billEnd = $to->copy()->startOfDay();
+                }
+
+                if ($billEnd->lt($billStart)) {
+                    return null;
+                }
+
+                $days = (int) $billStart->diffInDays($billEnd) + 1;
+                $amount = round($annual / self::INSURANCE_DAYS_IN_YEAR * $days, 2);
+                $providerName = trim((string) ($policy->insuranceProvider?->provider_name ?: 'Insurance'));
+                $annualLabel = abs($annual - round($annual)) < 0.001
+                    ? number_format($annual, 0)
+                    : number_format($annual, 2);
+
+                return $this->line(
+                    date: $billStart->toDateString(),
+                    direction: 'out',
+                    summaryBucket: 'insurance',
+                    categoryLabel: 'Insurance',
+                    description: $providerName.' — '.$days.' days ('.$billStart->format('d M Y').' to '.$billEnd->format('d M Y').'), £'.$annualLabel.' per year',
+                    amount: $amount,
+                    postingStatus: null,
+                    sourceType: 'car_insurance',
+                    sourceId: $policy->id,
+                    sourceLabel: 'Insurance #'.$policy->id,
+                    sortKey: 'ins-'.$policy->id,
+                );
+            })
+            ->filter()
+            ->values();
+    }
+
+    private function insuranceCoverEnd(CarInsurance $policy, Carbon $today): Carbon
+    {
+        $ends = collect([
+            $policy->canceled_date?->copy()->startOfDay(),
+            $policy->expiry_date?->copy()->startOfDay(),
+        ])->filter();
+
+        if ($ends->isEmpty()) {
+            return $today->copy();
+        }
+
+        return $ends->sortBy(fn (Carbon $date) => $date->timestamp)->first();
     }
 
     private function expenseLines(Car $car, int $tenantId): Collection

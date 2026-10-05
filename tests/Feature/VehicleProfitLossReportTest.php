@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Agreement;
 use App\Models\Car;
+use App\Models\CarInsurance;
 use App\Models\Company;
+use App\Models\InsuranceProvider;
 use App\Models\Driver;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -217,6 +219,81 @@ class VehicleProfitLossReportTest extends TestCase
         $response->assertSee('Export CSV (Excel)', false);
     }
 
+    public function test_vehicle_pl_prorates_insurance_from_yearly_premium_after_cutoff(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-20 12:00:00'));
+
+        $this->createCarInsurance('2026-10-01', '2026-10-10');
+
+        $report = app(VehicleProfitLossReportService::class)->build($this->car, $this->tenant->id);
+        $expected = round(10000 / 365 * 10, 2);
+
+        $this->assertSame($expected, $report['summary']['insurance']);
+        $this->assertSame(
+            round($report['summary']['purchase'] + $expected, 2),
+            round($report['summary']['total_expenses'], 2)
+        );
+        $insuranceLine = collect($report['lines'])->firstWhere('source_type', 'car_insurance');
+        $this->assertNotNull($insuranceLine);
+        $this->assertSame($expected, $insuranceLine['amount']);
+        $this->assertSame('2026-10-01', $insuranceLine['date']);
+        $this->assertStringContainsString('Acme Insurance — 10 days (01 Oct 2026 to 10 Oct 2026), £10,000 per year', $insuranceLine['description']);
+
+        $pending = app(VehicleProfitLossReportService::class)->build(
+            $this->car,
+            $this->tenant->id,
+            null,
+            null,
+            VehicleProfitLossReportService::POSTING_PENDING
+        );
+        $this->assertSame(0.0, $pending['summary']['insurance']);
+    }
+
+    public function test_vehicle_pl_insurance_ignores_days_before_october_2026(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-20 12:00:00'));
+
+        $this->createCarInsurance('2026-09-21', '2026-10-10');
+
+        $report = app(VehicleProfitLossReportService::class)->build($this->car, $this->tenant->id);
+
+        $this->assertSame(round(10000 / 365 * 10, 2), $report['summary']['insurance']);
+        $insuranceLine = collect($report['lines'])->firstWhere('source_type', 'car_insurance');
+        $this->assertSame('2026-10-01', $insuranceLine['date']);
+        $this->assertStringContainsString('10 days (01 Oct 2026 to 10 Oct 2026)', $insuranceLine['description']);
+    }
+
+    public function test_vehicle_pl_insurance_clips_to_report_dates(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-20 12:00:00'));
+
+        $this->createCarInsurance('2026-10-01', '2026-10-10');
+
+        $report = app(VehicleProfitLossReportService::class)->build(
+            $this->car,
+            $this->tenant->id,
+            Carbon::parse('2026-10-05'),
+            Carbon::parse('2026-10-10'),
+        );
+
+        $this->assertSame(round(10000 / 365 * 6, 2), $report['summary']['insurance']);
+        $insuranceLine = collect($report['lines'])->firstWhere('source_type', 'car_insurance');
+        $this->assertSame('2026-10-05', $insuranceLine['date']);
+        $this->assertStringContainsString('6 days (05 Oct 2026 to 10 Oct 2026)', $insuranceLine['description']);
+    }
+
+    public function test_vehicle_pl_insurance_skips_cover_that_ended_before_cutoff(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-20 12:00:00'));
+
+        $this->createCarInsurance('2026-09-01', '2026-09-20');
+
+        $report = app(VehicleProfitLossReportService::class)->build($this->car, $this->tenant->id);
+
+        $this->assertSame(0.0, $report['summary']['insurance']);
+        $this->assertNull(collect($report['lines'])->firstWhere('source_type', 'car_insurance'));
+    }
+
     public function test_vehicle_pl_csv_export(): void
     {
         $response = $this->get(route('reports.index', [
@@ -227,6 +304,22 @@ class VehicleProfitLossReportTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
         $this->assertStringContainsString('purchase', strtolower($response->streamedContent()));
+    }
+
+    private function createCarInsurance(string $startDate, string $endDate): CarInsurance
+    {
+        $provider = InsuranceProvider::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'provider_name' => 'Acme Insurance',
+            'amount' => 10000,
+        ]);
+
+        return CarInsurance::query()->create([
+            'car_id' => $this->car->id,
+            'insurance_provider_id' => $provider->id,
+            'start_date' => $startDate,
+            'expiry_date' => $endDate,
+        ]);
     }
 
     private function setUpHttpTestExtras(): void
@@ -254,8 +347,25 @@ class VehicleProfitLossReportTest extends TestCase
                 $table->id();
                 $table->foreignId('tenant_id')->nullable();
                 $table->string('provider_name');
+                $table->decimal('amount', 10, 2)->default(0);
                 $table->date('expiry_date')->nullable();
                 $table->timestamps();
+            });
+        }
+
+        if (Schema::hasTable('insurance_providers') && ! Schema::hasColumn('insurance_providers', 'amount')) {
+            Schema::table('insurance_providers', function (Blueprint $table) {
+                $table->decimal('amount', 10, 2)->default(0);
+            });
+        }
+
+        if (Schema::hasTable('car_insurances') && ! Schema::hasColumn('car_insurances', 'start_date')) {
+            Schema::table('car_insurances', function (Blueprint $table) {
+                $table->unsignedBigInteger('insurance_provider_id')->nullable();
+                $table->date('start_date')->nullable();
+                $table->date('expiry_date')->nullable();
+                $table->date('canceled_date')->nullable();
+                $table->unsignedBigInteger('status_id')->nullable();
             });
         }
 

@@ -356,6 +356,134 @@ class PaymentsIndexTest extends TestCase
         $response->assertJsonFragment(['total_due_html' => '<strong class="text-warning js-dfs-pending-amount" data-toggle="tooltip" data-placement="top" title="£75.00 pending daily financial sheet approval.">£150.00</strong>']);
     }
 
+    public function test_payments_index_shows_clear_button_only_for_payment_manager_with_unpaid_invoices(): void
+    {
+        $owingDriver = $this->createDriver('Owing', 'Driver', 'owing@example.com');
+        $clearDriver = $this->createDriver('Clear', 'Driver', 'clear@example.com');
+
+        Invoice::query()->create([
+            'driver_id' => $owingDriver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-CLEAR-BTN',
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => 150,
+            'paid_amount' => 0,
+            'balance_amount' => 150,
+            'status' => 'pending',
+        ]);
+
+        $hidden = $this->paymentsDatatableResponse();
+        $hidden->assertOk();
+        $this->assertStringNotContainsString('js-clear-driver-payments', $hidden->getContent());
+
+        $this->user->forceFill(['email' => 'jawad@samoretraders.com'])->save();
+
+        $response = $this->paymentsDatatableResponse();
+        $response->assertOk();
+        $rows = collect($response->json('data'));
+        $owingActions = (string) $rows->first(fn (array $row) => str_contains($row['driver'], 'Owing'))['actions_html'];
+        $clearActions = (string) $rows->first(fn (array $row) => str_contains($row['driver'], 'Clear'))['actions_html'];
+
+        $this->assertStringContainsString('js-clear-driver-payments', $owingActions);
+        $this->assertStringContainsString('Clear all payments', $owingActions);
+        $this->assertStringContainsString('data-amount="150.00"', $owingActions);
+        $this->assertStringNotContainsString('js-clear-driver-payments', $clearActions);
+    }
+
+    public function test_clear_outstanding_is_forbidden_for_other_users(): void
+    {
+        $driver = $this->createDriver('Blocked', 'Clear', 'blocked-clear@example.com');
+        Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-BLOCKED',
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => 80,
+            'paid_amount' => 0,
+            'balance_amount' => 80,
+            'status' => 'pending',
+        ]);
+
+        $this->post(route('payments.clear-outstanding', $driver))->assertForbidden();
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertEquals(80, (float) Invoice::query()->first()->balance_amount);
+    }
+
+    public function test_clear_outstanding_posts_cash_payment_and_clears_unpaid_invoices(): void
+    {
+        $this->user->forceFill(['email' => 'jawad@samoretraders.com'])->save();
+        $driver = $this->createDriver('Cleared', 'Driver', 'cleared@example.com');
+
+        $firstInvoice = Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-CLEAR-1',
+            'invoice_date' => '2026-07-01',
+            'due_date' => '2026-07-08',
+            'total_amount' => 100,
+            'paid_amount' => 0,
+            'balance_amount' => 100,
+            'status' => 'pending',
+        ]);
+        $secondInvoice = Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-CLEAR-2',
+            'invoice_date' => '2026-07-02',
+            'due_date' => '2026-07-09',
+            'total_amount' => 50,
+            'paid_amount' => 0,
+            'balance_amount' => 50,
+            'status' => 'pending',
+        ]);
+        $cancelledInvoice = Invoice::query()->create([
+            'driver_id' => $driver->id,
+            'invoice_type' => 'manual',
+            'invoice_no' => 'INV-CLEAR-CANCELLED',
+            'invoice_date' => '2026-06-01',
+            'due_date' => '2026-06-08',
+            'total_amount' => 40,
+            'paid_amount' => 0,
+            'balance_amount' => 40,
+            'status' => 'cancelled',
+        ]);
+
+        $this->post(route('payments.clear-outstanding', $driver))
+            ->assertRedirect(route('payments.index'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseCount('payments', 1);
+        $payment = Payment::query()->first();
+        $this->assertSame('Cash', $payment->payment_method);
+        $this->assertSame(Payment::POSTING_STATUS_POSTED, $payment->posting_status);
+        $this->assertSame(Payment::MANUAL_CLEAR_NOTE, $payment->notes);
+        $this->assertTrue($payment->exclude_from_daily_financial);
+        $this->assertEquals(150, (float) $payment->amount);
+        $this->assertEquals(150, (float) $payment->allocations()->sum('allocated_amount'));
+
+        $firstInvoice->refresh();
+        $secondInvoice->refresh();
+        $cancelledInvoice->refresh();
+        $this->assertEquals(0, (float) $firstInvoice->balance_amount);
+        $this->assertEquals(0, (float) $secondInvoice->balance_amount);
+        $this->assertEquals(40, (float) $cancelledInvoice->balance_amount);
+        $this->assertSame('cancelled', $cancelledInvoice->status);
+    }
+
+    public function test_clear_outstanding_does_nothing_when_driver_has_no_unpaid_invoices(): void
+    {
+        $this->user->forceFill(['email' => 'jawad@samoretraders.com'])->save();
+        $driver = $this->createDriver('Nothing', 'Due', 'nothing-due@example.com');
+
+        $this->post(route('payments.clear-outstanding', $driver))
+            ->assertRedirect(route('payments.index'))
+            ->assertSessionHas('error', 'This driver has no unpaid invoices to clear.');
+
+        $this->assertDatabaseCount('payments', 0);
+    }
+
     public function test_payments_index_shows_paying_company_name_below_driver(): void
     {
         $driver = $this->createDriver('Paying', 'Company', 'paying@example.com');

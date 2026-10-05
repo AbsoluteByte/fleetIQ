@@ -65,9 +65,10 @@ class PaymentController extends Controller
         $query = $indexService->baseQuery($tenant->id);
         $indexService->applyFilters($query, $request);
 
+        $canClearOutstanding = $this->canManagePayments();
         $rowCache = [];
-        $rowFor = function (Driver $driver) use ($indexService, &$rowCache): array {
-            return $rowCache[$driver->id] ??= $indexService->rowPayload($driver);
+        $rowFor = function (Driver $driver) use ($indexService, &$rowCache, $canClearOutstanding): array {
+            return $rowCache[$driver->id] ??= $indexService->rowPayload($driver, $canClearOutstanding);
         };
 
         return datatables()->eloquent($query)
@@ -190,6 +191,26 @@ class PaymentController extends Controller
             'canManagePayments',
             'canManageInvoices',
         ));
+    }
+
+    public function clearOutstanding(Driver $driver, PaymentAllocationService $paymentAllocationService)
+    {
+        abort_unless($this->canManagePayments(), 403);
+
+        $tenant = Auth::user()->currentTenant();
+        $this->authorizeDriver($driver, $tenant);
+
+        try {
+            $payment = $paymentAllocationService->clearOutstandingInvoices($driver);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            return redirect()->route('payments.index')
+                ->with('error', collect($exception->errors())->flatten()->first());
+        }
+
+        $driverName = $driver->selectOptionLabel() ?: trim($driver->first_name.' '.$driver->last_name);
+
+        return redirect()->route('payments.index')
+            ->with('success', 'Cleared £'.number_format((float) $payment->amount, 2).' of unpaid invoices for '.$driverName.'.');
     }
 
     public function refundCredit(Request $request, Driver $driver, DriverCreditService $creditService)

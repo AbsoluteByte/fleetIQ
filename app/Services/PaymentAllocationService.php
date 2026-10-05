@@ -74,6 +74,49 @@ class PaymentAllocationService
         return $amounts;
     }
 
+    public function clearOutstandingInvoices(Driver $driver): Payment
+    {
+        return DB::transaction(function () use ($driver) {
+            $invoices = Invoice::query()
+                ->where('driver_id', $driver->id)
+                ->where('balance_amount', '>', 0)
+                ->where('status', '!=', 'cancelled')
+                ->orderBy('invoice_date')
+                ->orderBy('due_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $allocations = [];
+            foreach ($invoices as $invoice) {
+                $available = round(max((float) $invoice->balance_amount - $invoice->reserved_credit_amount, 0), 2);
+                if ($available <= 0) {
+                    continue;
+                }
+
+                $allocations[$invoice->id] = $available;
+            }
+
+            $amount = round(array_sum($allocations), 2);
+            if ($amount <= 0) {
+                throw ValidationException::withMessages([
+                    'driver' => 'This driver has no unpaid invoices to clear.',
+                ]);
+            }
+
+            $payment = $this->createPayment($driver, [
+                'payment_method' => 'Cash',
+                'bank_account_id' => null,
+                'payment_date' => now()->toDateString(),
+                'amount' => $amount,
+                'notes' => Payment::MANUAL_CLEAR_NOTE,
+                'exclude_from_daily_financial' => true,
+            ], false, $allocations, false);
+
+            return $this->postPayment($payment);
+        });
+    }
+
     public function createPayment(
         Driver $driver,
         array $paymentData,

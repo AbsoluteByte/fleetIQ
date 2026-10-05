@@ -16,6 +16,7 @@ use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class DailyFinancialSheetService
@@ -106,7 +107,7 @@ class DailyFinancialSheetService
             ->whereDate('refund_date', $date)
             ->get();
 
-        $payments = Payment::query()
+        $paymentQuery = Payment::query()
             ->with([
                 'driver',
                 'bankAccount',
@@ -117,7 +118,13 @@ class DailyFinancialSheetService
                 'allocations.invoice.sourceAgreement.car',
             ])
             ->whereDate('payment_date', $date)
-            ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId))
+            ->whereHas('driver', fn ($query) => $query->where('tenant_id', $tenantId));
+
+        if (Schema::hasColumn('payments', 'exclude_from_daily_financial')) {
+            $paymentQuery->where('exclude_from_daily_financial', false);
+        }
+
+        $payments = $paymentQuery
             ->get()
             ->map(function (Payment $payment) use ($refunds, $date) {
                 $linkedRefund = $refunds->first(fn (DepositRefund $refund) => in_array(

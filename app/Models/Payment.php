@@ -15,6 +15,8 @@ class Payment extends Model
 
     public const POSTING_STATUS_POSTED = 'posted';
 
+    public const MANUAL_CLEAR_NOTE = 'Manually cleared with the Clear all payments button.';
+
     /** @var list<string> */
     public const METHODS_REQUIRING_BANK_ACCOUNT = ['Bank Transfer', 'Card Payment'];
 
@@ -41,6 +43,7 @@ class Payment extends Model
         'amount',
         'notes',
         'posting_status',
+        'exclude_from_daily_financial',
         'created_by',
         'auto_allocate',
         'allocation_source_id',
@@ -52,6 +55,7 @@ class Payment extends Model
         'payment_date' => 'date',
         'amount' => 'decimal:2',
         'auto_allocate' => 'boolean',
+        'exclude_from_daily_financial' => 'boolean',
         'allocation_invoice_types' => 'array',
         'pending_manual_allocations' => 'array',
     ];
