@@ -119,6 +119,38 @@
     </aside>
 
     @include('backend.payments.partials.follow-up-modal')
+
+    <div class="modal fade" id="clearDriverPaymentsModal" tabindex="-1" role="dialog" aria-labelledby="clearDriverPaymentsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 28rem;">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title d-flex align-items-center mb-0" id="clearDriverPaymentsModalLabel">
+                        <span class="rounded-circle d-inline-flex align-items-center justify-content-center mr-75"
+                              style="width:2.25rem;height:2.25rem;background:rgba(255,159,67,.12);color:#ff9f43;">
+                            <i class="fa fa-eraser"></i>
+                        </span>
+                        <span>Clear payments</span>
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form id="clearDriverPaymentsForm" method="POST" action="">
+                    @csrf
+                    <div class="modal-body pt-1 pb-2">
+                        <p class="mb-0 text-body" id="clearDriverPaymentsBody" style="line-height: 1.55;"></p>
+                        <p class="small text-muted mb-0 mt-1" id="clearDriverPaymentsAmount"></p>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning" id="clearDriverPaymentsConfirmBtn">
+                            <i class="fa fa-eraser mr-50"></i>Yes, clear payments
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">
@@ -796,6 +828,26 @@
             }
 
             $setReminder.on('change', toggleRemindAt);
+
+            $(document).on('click', '.js-clear-driver-payments', function () {
+                const button = $(this);
+                const driverName = button.attr('data-driver-name') || 'this driver';
+                const amount = Number(button.attr('data-amount') || 0);
+                const formattedAmount = '£' + amount.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+
+                $('#clearDriverPaymentsBody').text('Are you sure you want to clear payments of ' + driverName + '?');
+                $('#clearDriverPaymentsAmount').text(formattedAmount + ' of unpaid invoices will be cleared.');
+                $('#clearDriverPaymentsForm').attr('action', button.attr('data-clear-url') || '');
+                $('#clearDriverPaymentsConfirmBtn').prop('disabled', false);
+                $('#clearDriverPaymentsModal').modal('show');
+            });
+
+            $('#clearDriverPaymentsForm').on('submit', function () {
+                $('#clearDriverPaymentsConfirmBtn').prop('disabled', true);
+            });
 
             $(document).on('click', '.js-driver-follow-up', function () {
                 activeButton = $(this);

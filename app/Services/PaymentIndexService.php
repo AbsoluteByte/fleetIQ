@@ -72,7 +72,7 @@ class PaymentIndexService
     /**
      * @return array<string, mixed>
      */
-    public function rowPayload(Driver $driver): array
+    public function rowPayload(Driver $driver, bool $canClearOutstanding = false): array
     {
         $lastPaymentIso = $driver->last_posted_payment_date
             ? \Carbon\Carbon::parse($driver->last_posted_payment_date)->format('Y-m-d')
@@ -114,7 +114,7 @@ class PaymentIndexService
             'last_payment' => $lastPaymentIso ? \Carbon\Carbon::parse($lastPaymentIso)->format('d M Y') : '—',
             'total_due_html' => $this->totalDueHtml($driver, $totalDueClass, $hasPendingDfs, $pendingDfsTooltip),
             'credit_html' => $this->creditHtml($driver),
-            'actions_html' => $this->actionsHtml($driver),
+            'actions_html' => $this->actionsHtml($driver, $canClearOutstanding),
             'filter_driver_status' => $driver->is_active ? 'active' : 'inactive',
             'filter_remind_at' => $driver->payment_remind_at?->toIso8601String() ?? '',
             'filter_last_payment_date' => $lastPaymentIso,
@@ -164,7 +164,7 @@ class PaymentIndexService
         return $html;
     }
 
-    private function actionsHtml(Driver $driver): string
+    private function actionsHtml(Driver $driver, bool $canClearOutstanding = false): string
     {
         $showUrl = e(route('payments.driver', $driver));
         $createUrl = e(route('payments.create', ['driver_id' => $driver->id]));
@@ -172,6 +172,16 @@ class PaymentIndexService
         $driverName = e($driver->selectOptionLabel() ?: trim($driver->first_name.' '.$driver->last_name));
         $hasFollowUp = $driver->hasPaymentFollowUpNote() || $driver->hasPaymentReminder();
         $followUpClass = $hasFollowUp ? 'btn-warning' : 'btn-outline-secondary';
+        $clearButton = '';
+
+        if ($canClearOutstanding && (float) $driver->total_due > 0) {
+            $clearUrl = e(route('payments.clear-outstanding', $driver));
+            $amount = e(number_format((float) $driver->total_due, 2, '.', ''));
+            $clearButton = '<button type="button" class="btn btn-sm btn-outline-warning js-action-tooltip js-clear-driver-payments" data-toggle="tooltip" title="Clear all payments"'
+                .' data-driver-name="'.$driverName.'"'
+                .' data-amount="'.$amount.'"'
+                .' data-clear-url="'.$clearUrl.'"><i class="fa fa-eraser"></i></button>';
+        }
 
         return '<div class="btn-group" role="group">'
             .'<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info js-action-tooltip" data-toggle="tooltip" title="View Driver Payments"><i class="fa fa-eye"></i></a>'
@@ -181,6 +191,7 @@ class PaymentIndexService
             .' data-notes="'.e($driver->payment_follow_up_notes ?? '').'"'
             .' data-remind-at="'.e($driver->payment_remind_at?->toIso8601String() ?? '').'"'
             .' data-update-url="'.$updateUrl.'"><i class="fa fa-sticky-note"></i></button>'
+            .$clearButton
             .'</div>';
     }
 

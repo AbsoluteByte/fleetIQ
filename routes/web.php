@@ -180,6 +180,8 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         ->name('payments.follow-up.update');
     Route::post('payments/drivers/{driver}/follow-up/dismiss', [App\Http\Controllers\Backend\PaymentController::class, 'dismissFollowUpReminder'])
         ->name('payments.follow-up.dismiss');
+    Route::post('payments/drivers/{driver}/clear-outstanding', [App\Http\Controllers\Backend\PaymentController::class, 'clearOutstanding'])
+        ->name('payments.clear-outstanding');
     Route::get('payments/follow-up-reminders/due', [App\Http\Controllers\Backend\PaymentController::class, 'dueFollowUpReminders'])
         ->name('payments.follow-up.due');
     Route::patch('payments/{payment}/notes', [App\Http\Controllers\Backend\PaymentController::class, 'updateNotes'])->name('payments.notes.update');

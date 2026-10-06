@@ -177,6 +177,56 @@ class DailyFinancialSheetTest extends TestCase
         $this->assertSame(Payment::POSTING_STATUS_POSTED, $payment->posting_status);
     }
 
+    public function test_clear_outstanding_payment_is_posted_and_hidden_from_daily_financial_sheet(): void
+    {
+        $invoice = $this->createInvoice(120);
+        $date = now()->toDateString();
+
+        $visiblePayment = Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_method' => 'Cash',
+            'payment_date' => $date,
+            'amount' => 30,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+            'exclude_from_daily_financial' => false,
+            'auto_allocate' => false,
+            'created_by' => $this->approver->id,
+        ]);
+
+        $this->actingAs($this->employee);
+        $this->employee->switchTenant($this->tenant->id);
+        $this->post(route('payments.clear-outstanding', $this->driver))->assertForbidden();
+
+        $this->actingAs($this->approver);
+        $this->approver->switchTenant($this->tenant->id);
+
+        $this->post(route('payments.clear-outstanding', $this->driver))
+            ->assertRedirect(route('payments.index'));
+
+        $invoice->refresh();
+        $this->assertEquals(0, (float) $invoice->balance_amount);
+
+        $clearedPayment = Payment::query()->where('exclude_from_daily_financial', true)->first();
+        $this->assertNotNull($clearedPayment);
+        $this->assertSame('Cash', $clearedPayment->payment_method);
+        $this->assertSame(Payment::POSTING_STATUS_POSTED, $clearedPayment->posting_status);
+        $this->assertSame(Payment::MANUAL_CLEAR_NOTE, $clearedPayment->notes);
+        $this->assertEquals(120, (float) $clearedPayment->amount);
+
+        $service = app(DailyFinancialSheetService::class);
+        $entries = $service->entriesForDate($this->tenant->id, $date);
+        $entryIds = $entries->pluck('id');
+
+        $this->assertFalse($entryIds->contains('payment-'.$clearedPayment->id));
+        $this->assertTrue($entryIds->contains('payment-'.$visiblePayment->id));
+        $this->assertEquals(30, $service->computeTotals($entries)['cash_in']);
+
+        $this->get(route('daily-financial-sheet.show', $date))
+            ->assertOk()
+            ->assertDontSee(Payment::MANUAL_CLEAR_NOTE)
+            ->assertSee('£30.00');
+    }
+
     public function test_sheet_detail_shows_cash_and_bank_totals(): void
     {
         $date = now()->toDateString();
@@ -1347,6 +1397,7 @@ class DailyFinancialSheetTest extends TestCase
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();
             $table->string('posting_status', 20)->default('pending');
+            $table->boolean('exclude_from_daily_financial')->default(false);
             $table->foreignId('created_by')->nullable();
             $table->boolean('auto_allocate')->default(true);
             $table->unsignedBigInteger('allocation_source_id')->nullable();

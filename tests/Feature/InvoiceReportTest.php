@@ -445,6 +445,59 @@ class InvoiceReportTest extends TestCase
         $this->assertSame($this->driver->fresh()->selectOptionLabel(), $rows['INV-PAID-DATE']['customer']);
     }
 
+    public function test_balance_column_shows_posted_payments_and_excludes_pending_sheet_payments(): void
+    {
+        $this->createInvoice([
+            'invoice_no' => 'INV-BALANCE',
+            'invoice_date' => '2026-08-10',
+            'total_amount' => 250,
+            'paid_amount' => 0,
+            'balance_amount' => 250,
+            'status' => 'pending',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_date' => '2026-08-11',
+            'amount' => 700,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+        ]);
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_date' => '2026-08-12',
+            'amount' => 300,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+        ]);
+
+        $otherDriver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Other',
+            'last_name' => 'Driver',
+            'email' => 'other-balance@example.com',
+            'is_active' => true,
+        ]);
+        $this->createInvoice([
+            'driver_id' => $otherDriver->id,
+            'invoice_no' => 'INV-OTHER',
+            'invoice_date' => '2026-08-10',
+            'total_amount' => 250,
+            'paid_amount' => 0,
+            'balance_amount' => 250,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+        ]));
+
+        $response->assertOk();
+        $rows = collect($response->viewData('rows'))->keyBy('invoice_no');
+        $this->assertSame('£250.00', $rows['INV-BALANCE']['amount']);
+        $this->assertSame('£700.00', $rows['INV-BALANCE']['balance']);
+        $this->assertSame('£0.00', $rows['INV-OTHER']['balance']);
+    }
+
     public function test_page_renders_invoice_type_filter(): void
     {
         $response = $this->get(route('payments.invoices'));

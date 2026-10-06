@@ -225,6 +225,7 @@ trait SetupAgreementChangeCarDatabase
             $table->decimal('amount', 12, 2)->default(0);
             $table->text('notes')->nullable();
             $table->string('posting_status', 20)->default('pending');
+            $table->boolean('exclude_from_daily_financial')->default(false);
             $table->unsignedBigInteger('created_by')->nullable();
             $table->boolean('auto_allocate')->default(true);
             $table->unsignedBigInteger('allocation_source_id')->nullable();
