@@ -104,6 +104,7 @@
                                         <th>Amount</th>
                                         <th>Status</th>
                                         <th>Payment Date</th>
+                                        <th>Last Payment Date</th>
                                         <th>Balance</th>
                                     </tr>
                                     </thead>
@@ -117,11 +118,12 @@
                                             <td>{{ $row['amount'] }}</td>
                                             <td>{{ $row['status'] }}</td>
                                             <td>{{ $row['payment_date'] }}</td>
+                                            <td>{{ $row['last_payment_date'] }}</td>
                                             <td>{{ $row['balance'] }}</td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">No invoices found for the selected filters.</td>
+                                            <td colspan="9" class="text-center text-muted py-4">No invoices found for the selected filters.</td>
                                         </tr>
                                     @endforelse
                                     </tbody>
@@ -240,7 +242,7 @@
             }
 
             function getInvoicesExportHeaders() {
-                return ['Invoice No', 'Customer', 'Vehicle', 'Invoice Date', 'Amount', 'Status', 'Payment Date', 'Balance'];
+                return ['Invoice No', 'Customer', 'Vehicle', 'Invoice Date', 'Amount', 'Status', 'Payment Date', 'Last Payment Date', 'Balance'];
             }
 
             function formatDateLabel(value) {
@@ -326,7 +328,7 @@
                     }
 
                     const cells = node.querySelectorAll('td');
-                    if (cells.length < 8) {
+                    if (cells.length < 9) {
                         return;
                     }
 
@@ -344,6 +346,7 @@
                         (cells[5].textContent || '').trim(),
                         (cells[6].textContent || '').trim(),
                         (cells[7].textContent || '').trim(),
+                        (cells[8].textContent || '').trim(),
                     ]);
                 });
 
@@ -388,7 +391,7 @@
                     return;
                 }
 
-                const numericColumns = { 4: true, 7: true };
+                const numericColumns = { 4: true, 8: true };
                 const tableBody = [
                     exportHeaders.map(function (header, columnIndex) {
                         return {
@@ -433,7 +436,7 @@
                         {
                             table: {
                                 headerRows: 1,
-                                widths: [90, '*', 70, 80, 70, 70, 80, 70],
+                                widths: [80, '*', 60, 70, 55, 55, 70, 75, 60],
                                 body: tableBody,
                             },
                             layout: {
