@@ -445,7 +445,7 @@ class InvoiceReportTest extends TestCase
         $this->assertSame($this->driver->fresh()->selectOptionLabel(), $rows['INV-PAID-DATE']['customer']);
     }
 
-    public function test_balance_column_shows_posted_payments_and_excludes_pending_sheet_payments(): void
+    public function test_balance_column_shows_driver_outstanding_and_ignores_pending_sheet_payments(): void
     {
         $this->createInvoice([
             'invoice_no' => 'INV-BALANCE',
@@ -455,11 +455,19 @@ class InvoiceReportTest extends TestCase
             'balance_amount' => 250,
             'status' => 'pending',
         ]);
+        $this->createInvoice([
+            'invoice_no' => 'INV-OLDER',
+            'invoice_date' => '2026-07-01',
+            'total_amount' => 450,
+            'paid_amount' => 0,
+            'balance_amount' => 450,
+            'status' => 'partial',
+        ]);
 
         Payment::query()->create([
             'driver_id' => $this->driver->id,
             'payment_date' => '2026-08-11',
-            'amount' => 700,
+            'amount' => 100,
             'posting_status' => Payment::POSTING_STATUS_POSTED,
         ]);
         Payment::query()->create([
@@ -480,9 +488,9 @@ class InvoiceReportTest extends TestCase
             'driver_id' => $otherDriver->id,
             'invoice_no' => 'INV-OTHER',
             'invoice_date' => '2026-08-10',
-            'total_amount' => 250,
+            'total_amount' => 80,
             'paid_amount' => 0,
-            'balance_amount' => 250,
+            'balance_amount' => 80,
             'status' => 'pending',
         ]);
 
@@ -495,7 +503,7 @@ class InvoiceReportTest extends TestCase
         $rows = collect($response->viewData('rows'))->keyBy('invoice_no');
         $this->assertSame('£250.00', $rows['INV-BALANCE']['amount']);
         $this->assertSame('£700.00', $rows['INV-BALANCE']['balance']);
-        $this->assertSame('£0.00', $rows['INV-OTHER']['balance']);
+        $this->assertSame('£80.00', $rows['INV-OTHER']['balance']);
     }
 
     public function test_page_renders_invoice_type_filter(): void
