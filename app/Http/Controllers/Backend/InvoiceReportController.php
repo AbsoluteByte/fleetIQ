@@ -61,13 +61,14 @@ class InvoiceReportController extends Controller
         $summary = $this->buildSummary($typeFilteredInvoices);
         $filteredInvoices = $this->applyStatusFilter($typeFilteredInvoices, $statusFilter);
 
-        $outstandingTotals = $this->outstandingTotalsByDriver(
-            $filteredInvoices->pluck('driver_id')->filter()->unique()->values()->all()
-        );
+        $driverIds = $filteredInvoices->pluck('driver_id')->filter()->unique()->values()->all();
+        $outstandingTotals = $this->outstandingTotalsByDriver($driverIds);
+        $lastPaymentDates = $this->lastPaymentDatesByDriver($driverIds);
 
         $rows = $filteredInvoices->map(fn (Invoice $invoice) => $this->mapInvoiceRow(
             $invoice,
-            (float) ($outstandingTotals[(int) $invoice->driver_id] ?? 0)
+            (float) ($outstandingTotals[(int) $invoice->driver_id] ?? 0),
+            $lastPaymentDates[(int) $invoice->driver_id] ?? null
         ));
 
         return view('backend.payments.invoices', [
@@ -164,6 +165,27 @@ class InvoiceReportController extends Controller
     }
 
     /**
+     * @param  list<int>  $driverIds
+     * @return array<int, Carbon>
+     */
+    private function lastPaymentDatesByDriver(array $driverIds): array
+    {
+        if ($driverIds === []) {
+            return [];
+        }
+
+        return Payment::query()
+            ->whereIn('driver_id', $driverIds)
+            ->whereNotNull('payment_date')
+            ->whereDate('payment_date', '<=', now()->toDateString())
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, MAX(payment_date) as last_payment_date')
+            ->pluck('last_payment_date', 'driver_id')
+            ->mapWithKeys(fn ($date, $driverId) => [(int) $driverId => Carbon::parse($date)])
+            ->all();
+    }
+
+    /**
      * @return array{
      *     invoice_no: string,
      *     customer: string,
@@ -172,10 +194,11 @@ class InvoiceReportController extends Controller
      *     amount: string,
      *     status: string,
      *     payment_date: string,
+     *     last_payment_date: string,
      *     balance: string
      * }
      */
-    private function mapInvoiceRow(Invoice $invoice, float $outstandingTotal): array
+    private function mapInvoiceRow(Invoice $invoice, float $outstandingTotal, ?Carbon $lastPaymentDate): array
     {
         return [
             'invoice_no' => (string) ($invoice->invoice_no ?: '—'),
@@ -185,6 +208,7 @@ class InvoiceReportController extends Controller
             'amount' => '£'.number_format((float) $invoice->total_amount, 2),
             'status' => ucfirst((string) $invoice->status),
             'payment_date' => $this->latestPostedPaymentDate($invoice)?->format('d M Y') ?: '—',
+            'last_payment_date' => $lastPaymentDate?->format('d M Y') ?: '—',
             'balance' => '£'.number_format($outstandingTotal, 2),
         ];
     }

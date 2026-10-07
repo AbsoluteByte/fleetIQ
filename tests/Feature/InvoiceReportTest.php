@@ -503,7 +503,48 @@ class InvoiceReportTest extends TestCase
         $rows = collect($response->viewData('rows'))->keyBy('invoice_no');
         $this->assertSame('£250.00', $rows['INV-BALANCE']['amount']);
         $this->assertSame('£700.00', $rows['INV-BALANCE']['balance']);
+        $this->assertSame('12 Aug 2026', $rows['INV-BALANCE']['last_payment_date']);
         $this->assertSame('£80.00', $rows['INV-OTHER']['balance']);
+        $this->assertSame('—', $rows['INV-OTHER']['last_payment_date']);
+    }
+
+    public function test_last_payment_date_is_the_drivers_latest_payment_on_or_before_today(): void
+    {
+        $this->createInvoice([
+            'invoice_no' => 'INV-LAST-PAY',
+            'invoice_date' => '2026-08-10',
+            'total_amount' => 100,
+            'status' => 'pending',
+        ]);
+
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_date' => '2026-08-05',
+            'amount' => 40,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+        ]);
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_date' => '2026-08-16',
+            'amount' => 20,
+            'posting_status' => Payment::POSTING_STATUS_PENDING,
+        ]);
+        Payment::query()->create([
+            'driver_id' => $this->driver->id,
+            'payment_date' => '2026-08-20',
+            'amount' => 10,
+            'posting_status' => Payment::POSTING_STATUS_POSTED,
+        ]);
+
+        $response = $this->get(route('payments.invoices', [
+            'from' => '2026-08-01',
+            'to' => '2026-08-31',
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Last Payment Date');
+        $rows = collect($response->viewData('rows'))->keyBy('invoice_no');
+        $this->assertSame('16 Aug 2026', $rows['INV-LAST-PAY']['last_payment_date']);
     }
 
     public function test_page_renders_invoice_type_filter(): void
