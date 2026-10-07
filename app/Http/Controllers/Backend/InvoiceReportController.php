@@ -61,13 +61,13 @@ class InvoiceReportController extends Controller
         $summary = $this->buildSummary($typeFilteredInvoices);
         $filteredInvoices = $this->applyStatusFilter($typeFilteredInvoices, $statusFilter);
 
-        $postedTotals = $this->postedPaymentTotalsByDriver(
+        $outstandingTotals = $this->outstandingTotalsByDriver(
             $filteredInvoices->pluck('driver_id')->filter()->unique()->values()->all()
         );
 
         $rows = $filteredInvoices->map(fn (Invoice $invoice) => $this->mapInvoiceRow(
             $invoice,
-            (float) ($postedTotals[(int) $invoice->driver_id] ?? 0)
+            (float) ($outstandingTotals[(int) $invoice->driver_id] ?? 0)
         ));
 
         return view('backend.payments.invoices', [
@@ -143,6 +143,27 @@ class InvoiceReportController extends Controller
     }
 
     /**
+     * @param  list<int>  $driverIds
+     * @return array<int, float>
+     */
+    private function outstandingTotalsByDriver(array $driverIds): array
+    {
+        if ($driverIds === []) {
+            return [];
+        }
+
+        return Invoice::query()
+            ->whereIn('driver_id', $driverIds)
+            ->where('status', '!=', 'cancelled')
+            ->where('balance_amount', '>', 0)
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, SUM(balance_amount) as outstanding_total')
+            ->pluck('outstanding_total', 'driver_id')
+            ->mapWithKeys(fn ($total, $driverId) => [(int) $driverId => round((float) $total, 2)])
+            ->all();
+    }
+
+    /**
      * @return array{
      *     invoice_no: string,
      *     customer: string,
@@ -154,28 +175,7 @@ class InvoiceReportController extends Controller
      *     balance: string
      * }
      */
-    /**
-     * @param  list<int>  $driverIds
-     * @return array<int, float>
-     */
-    private function postedPaymentTotalsByDriver(array $driverIds): array
-    {
-        if ($driverIds === []) {
-            return [];
-        }
-
-        return Payment::query()
-            ->posted()
-            ->whereIn('driver_id', $driverIds)
-            ->whereDate('payment_date', '<=', now()->toDateString())
-            ->groupBy('driver_id')
-            ->selectRaw('driver_id, SUM(amount) as posted_total')
-            ->pluck('posted_total', 'driver_id')
-            ->mapWithKeys(fn ($total, $driverId) => [(int) $driverId => round((float) $total, 2)])
-            ->all();
-    }
-
-    private function mapInvoiceRow(Invoice $invoice, float $postedPaymentTotal): array
+    private function mapInvoiceRow(Invoice $invoice, float $outstandingTotal): array
     {
         return [
             'invoice_no' => (string) ($invoice->invoice_no ?: '—'),
@@ -185,7 +185,7 @@ class InvoiceReportController extends Controller
             'amount' => '£'.number_format((float) $invoice->total_amount, 2),
             'status' => ucfirst((string) $invoice->status),
             'payment_date' => $this->latestPostedPaymentDate($invoice)?->format('d M Y') ?: '—',
-            'balance' => '£'.number_format($postedPaymentTotal, 2),
+            'balance' => '£'.number_format($outstandingTotal, 2),
         ];
     }
 
