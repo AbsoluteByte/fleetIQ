@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Services\DailyFinancialSheetService;
+use App\Services\PaymentAllocationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class InvoiceController extends Controller
 {
@@ -54,20 +57,40 @@ class InvoiceController extends Controller
         return redirect()->back()->with('success', 'Invoice updated successfully.');
     }
 
-    public function destroy(Invoice $invoice)
-    {
+    public function destroy(
+        Request $request,
+        Invoice $invoice,
+        PaymentAllocationService $payments,
+        DailyFinancialSheetService $sheetService
+    ) {
         abort_unless($this->canManageInvoices(), 403);
         $this->authorizeInvoice($invoice);
 
         abort_unless(in_array($invoice->invoice_type, ['agreement', 'agreement_deposit', 'agreement_additional_charge'], true), 422);
 
-        if ($invoice->paymentAllocations()->exists()) {
-            return redirect()->back()->with('error', 'Cannot delete an invoice that has payment allocations.');
+        $disposition = $request->input('payment_disposition');
+
+        try {
+            $payments->deleteInvoice(
+                $invoice,
+                is_string($disposition) ? $disposition : null,
+                $sheetService,
+                (int) Auth::id()
+            );
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first()
+                ?: 'Choose whether to delete the payment or add it to driver credit.';
+
+            return redirect()->back()->with('error', $message);
         }
 
-        $invoice->delete();
+        $message = match ($disposition) {
+            'credit' => 'Invoice deleted. The paid amount was added to driver credit.',
+            'delete' => 'Invoice deleted and the payment was removed.',
+            default => 'Invoice deleted successfully.',
+        };
 
-        return redirect()->back()->with('success', 'Invoice deleted successfully.');
+        return redirect()->back()->with('success', $message);
     }
 
     private function authorizeInvoice(Invoice $invoice): void

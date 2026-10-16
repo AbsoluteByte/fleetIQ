@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Agreement;
 use App\Models\Driver;
+use App\Models\DriverCreditTransactionLine;
 use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Support\Collection;
@@ -243,6 +245,85 @@ class PaymentAllocationService
 
             $this->clearPaymentAllocations($payment);
             $payment->delete();
+        });
+    }
+
+    public function deleteInvoice(
+        Invoice $invoice,
+        ?string $disposition,
+        DailyFinancialSheetService $sheetService,
+        int $actorId
+    ): void {
+        DB::transaction(function () use ($invoice, $disposition, $sheetService, $actorId) {
+            $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $this->clearPendingInvoicePaymentLinks($invoice);
+
+            $allocations = $invoice->paymentAllocations()->get();
+            if ($allocations->isEmpty()) {
+                $this->releaseOneTimeDiscountConsumedBy($invoice);
+                $invoice->delete();
+
+                return;
+            }
+
+            if (! in_array($disposition, ['credit', 'delete'], true)) {
+                throw ValidationException::withMessages([
+                    'payment_disposition' => 'Choose whether to delete the payment or add it to driver credit.',
+                ]);
+            }
+
+            foreach ($allocations->groupBy('payment_id') as $invoiceAllocations) {
+                $payment = Payment::query()
+                    ->whereKey($invoiceAllocations->first()->payment_id)
+                    ->lockForUpdate()
+                    ->first();
+                $released = round((float) $invoiceAllocations->sum(fn ($row) => (float) $row->allocated_amount), 2);
+
+                if ($payment) {
+                    $this->releaseCreditLinesForAllocations($invoiceAllocations, $disposition);
+                }
+
+                $oldSnapshot = null;
+                if ($payment && $disposition === 'delete') {
+                    $payment->load(['driver', 'allocations']);
+                    $oldSnapshot = $this->paymentSnapshot($payment);
+                }
+
+                foreach ($invoiceAllocations as $allocation) {
+                    $allocation->delete();
+                }
+
+                if (! $payment || $disposition === 'credit') {
+                    continue;
+                }
+
+                $payment->refresh();
+                $otherAllocated = round((float) $payment->allocations()->sum('allocated_amount'), 2);
+                $remainingAmount = round(max((float) $payment->amount - $released, 0), 2);
+                $excludedFromSheet = Schema::hasColumn('payments', 'exclude_from_daily_financial')
+                    && (bool) $payment->exclude_from_daily_financial;
+                $stillLinkedToCredit = Schema::hasTable('driver_credit_transaction_lines')
+                    && $payment->creditTransactionLines()->exists();
+
+                if ($otherAllocated <= 0.009 && $remainingAmount <= 0.009 && ! $stillLinkedToCredit) {
+                    if ($excludedFromSheet) {
+                        $payment->delete();
+                    } else {
+                        $this->deletePayment($payment, $sheetService, $actorId);
+                    }
+
+                    continue;
+                }
+
+                $payment->update(['amount' => max($remainingAmount, $otherAllocated)]);
+
+                if (! $excludedFromSheet && $oldSnapshot && Schema::hasTable('daily_financial_sheets')) {
+                    $sheetService->recordPaymentCorrection($payment->fresh(['driver']), $oldSnapshot, $actorId);
+                }
+            }
+
+            $this->releaseOneTimeDiscountConsumedBy($invoice);
+            $invoice->delete();
         });
     }
 
@@ -552,5 +633,129 @@ class PaymentAllocationService
         ]);
 
         $invoice->refreshPaymentTotals();
+    }
+
+    private function clearPendingInvoicePaymentLinks(Invoice $invoice): void
+    {
+        $this->releasePendingCreditReservations($invoice);
+        $this->removePendingManualAllocationTarget($invoice);
+    }
+
+    private function releasePendingCreditReservations(Invoice $invoice): void
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')) {
+            return;
+        }
+
+        $lines = DriverCreditTransactionLine::query()
+            ->where('target_invoice_id', $invoice->id)
+            ->where('status', DriverCreditTransactionLine::STATUS_RESERVED)
+            ->whereHas('transaction', fn ($query) => $query->pending())
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($lines->groupBy('driver_credit_transaction_id') as $transactionLines) {
+            $transaction = $transactionLines->first()->transaction;
+            foreach ($transactionLines as $line) {
+                $line->delete();
+            }
+
+            $remainingAmount = round((float) $transaction->lines()->sum('amount'), 2);
+            if ($remainingAmount <= 0) {
+                $transaction->delete();
+            } else {
+                $transaction->update(['amount' => $remainingAmount]);
+            }
+        }
+    }
+
+    private function removePendingManualAllocationTarget(Invoice $invoice): void
+    {
+        if (! Schema::hasTable('payments') || ! Schema::hasColumn('payments', 'pending_manual_allocations')) {
+            return;
+        }
+
+        Payment::query()
+            ->where('driver_id', $invoice->driver_id)
+            ->pending()
+            ->whereNotNull('pending_manual_allocations')
+            ->lockForUpdate()
+            ->get()
+            ->each(function (Payment $payment) use ($invoice) {
+                $allocations = $payment->pending_manual_allocations ?? [];
+                if (! array_key_exists((string) $invoice->id, $allocations)
+                    && ! array_key_exists($invoice->id, $allocations)) {
+                    return;
+                }
+
+                unset($allocations[(string) $invoice->id], $allocations[$invoice->id]);
+                $payment->update([
+                    'pending_manual_allocations' => $allocations === [] ? null : $allocations,
+                ]);
+            });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\PaymentAllocation>  $allocations
+     */
+    private function releaseCreditLinesForAllocations($allocations, string $disposition): void
+    {
+        if (! Schema::hasTable('driver_credit_transaction_lines')
+            || ! Schema::hasColumn('payment_allocations', 'driver_credit_transaction_line_id')) {
+            return;
+        }
+
+        foreach ($allocations as $allocation) {
+            $lineId = $allocation->driver_credit_transaction_line_id ?? null;
+            if (! $lineId) {
+                continue;
+            }
+
+            $line = DriverCreditTransactionLine::query()->whereKey($lineId)->lockForUpdate()->first();
+            if (! $line) {
+                continue;
+            }
+
+            $released = (float) $allocation->allocated_amount;
+            $lineAmount = (float) $line->amount;
+            if ($released + 0.001 >= $lineAmount) {
+                if ($disposition === 'delete') {
+                    $line->delete();
+                } else {
+                    $line->update([
+                        'amount' => 0,
+                        'status' => DriverCreditTransactionLine::STATUS_REVERSED,
+                        'target_invoice_id' => null,
+                    ]);
+                }
+
+                continue;
+            }
+
+            $line->update(['amount' => round($lineAmount - $released, 2)]);
+        }
+    }
+
+    private function releaseOneTimeDiscountConsumedBy(Invoice $invoice): void
+    {
+        if (! Schema::hasTable('agreements')
+            || ! Schema::hasColumn('agreements', 'discount_is_one_time')
+            || ! Schema::hasColumn('agreements', 'discount_consumed_invoice_id')
+            || ! $invoice->source_id) {
+            return;
+        }
+
+        $agreement = Agreement::query()->find($invoice->source_id);
+        if (! $agreement
+            || ! $agreement->discount_is_one_time
+            || (int) $agreement->discount_consumed_invoice_id !== (int) $invoice->id) {
+            return;
+        }
+
+        $agreement->forceFill([
+            'discount_consumed_at' => null,
+            'discount_consumed_invoice_id' => null,
+        ])->save();
     }
 }
