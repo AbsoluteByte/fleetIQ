@@ -64,10 +64,19 @@
                                   onsubmit="return confirm('Delete this invoice?');">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete invoice">
                                     <i class="fa fa-trash"></i>
                                 </button>
                             </form>
+                        @else
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger js-delete-paid-invoice"
+                                    title="Delete invoice"
+                                    data-destroy-url="{{ route('invoices.destroy', $invoice) }}"
+                                    data-invoice-no="{{ $invoice->invoice_no }}"
+                                    data-paid-amount="{{ number_format((float) $invoice->paid_amount, 2, '.', '') }}">
+                                <i class="fa fa-trash"></i>
+                            </button>
                         @endif
                     </td>
                 @endif
@@ -83,4 +92,5 @@
 
 @if($canManageInvoices ?? false)
     @include('backend.payments.partials.invoice-edit-modal')
+    @include('backend.payments.partials.delete-paid-invoice-modal')
 @endif
