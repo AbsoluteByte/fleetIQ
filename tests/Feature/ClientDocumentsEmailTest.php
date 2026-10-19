@@ -226,6 +226,7 @@ class ClientDocumentsEmailTest extends TestCase
         Mail::assertSent(AgreementClientDocumentsMail::class, function (AgreementClientDocumentsMail $mail) {
             return $mail->hasTo('docs-driver@example.com')
                 && $mail->hasCc('jawad@samoretraders.com')
+                && $mail->hasCc('agreements@samoretraders.com')
                 && count($mail->attachmentsData) > 0;
         });
     }
@@ -264,6 +265,7 @@ class ClientDocumentsEmailTest extends TestCase
         $response->assertSee('DEV MODE');
         $response->assertSee('docs-driver@example.com');
         $response->assertSee('jawad@samoretraders.com');
+        $response->assertSee('agreements@samoretraders.com');
         $response->assertSee('Client Documents');
         $response->assertSee('Attached Documents');
     }
