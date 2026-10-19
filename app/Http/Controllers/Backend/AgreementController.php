@@ -43,7 +43,11 @@ class AgreementController extends Controller
 {
     private const DISCOUNT_ALLOWED_EMAIL = 'jawad@samoretraders.com';
 
-    private const CLIENT_DOCUMENTS_RECIPIENT_EMAIL = 'jawad@samoretraders.com';
+    /** @var list<string> */
+    private const CLIENT_DOCUMENTS_CC_EMAILS = [
+        'jawad@samoretraders.com',
+        'agreements@samoretraders.com',
+    ];
 
     protected $url = 'agreements.';
 
@@ -2143,7 +2147,7 @@ class AgreementController extends Controller
             $generatedTempFiles = $payload['generatedTempFiles'];
 
             Mail::to($driverEmail)
-                ->cc(self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL)
+                ->cc(self::CLIENT_DOCUMENTS_CC_EMAILS)
                 ->send(new AgreementClientDocumentsMail(
                     $agreement,
                     $payload['attachments'],
@@ -2153,8 +2157,9 @@ class AgreementController extends Controller
 
             $sentCount = count($payload['attachments']);
             $missingCount = count($payload['missingDocuments']);
+            $ccList = implode(', ', self::CLIENT_DOCUMENTS_CC_EMAILS);
 
-            $message = 'Client documents email sent to '.$driverEmail.' (CC: '.self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL."). Attached: {$sentCount}.";
+            $message = 'Client documents email sent to '.$driverEmail." (CC: {$ccList}). Attached: {$sentCount}.";
             if ($missingCount > 0) {
                 $message .= " Missing listed in email: {$missingCount}.";
             }
@@ -2207,7 +2212,7 @@ class AgreementController extends Controller
             return view('backend.agreements.client-documents-email-preview', [
                 'agreement' => $agreement,
                 'recipient' => $driverEmail,
-                'ccRecipient' => self::CLIENT_DOCUMENTS_RECIPIENT_EMAIL,
+                'ccRecipient' => implode(', ', self::CLIENT_DOCUMENTS_CC_EMAILS),
                 'subject' => $subject,
                 'attachments' => $payload['attachments'],
                 'attachedLabels' => $payload['attachedLabels'],
