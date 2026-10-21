@@ -447,7 +447,7 @@ class AgreementClosingDateTest extends TestCase
             'source_id' => $agreement->id,
             'invoice_type' => $invoiceType,
             'invoice_date' => $invoiceDate,
-            'due_date' => Carbon::parse($invoiceDate)->addDays(5),
+            'due_date' => Invoice::dueDateFor($invoiceDate),
             'subtotal' => $total,
             'discount_amount' => 0,
             'tax_amount' => 0,
