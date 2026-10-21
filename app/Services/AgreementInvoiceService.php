@@ -109,7 +109,7 @@ class AgreementInvoiceService
 
         $amount = round((float) $charge->amount, 2);
         $invoiceDate = now()->startOfDay();
-        $dueDate = $invoiceDate->copy()->addDays(5);
+        $dueDate = Invoice::dueDateFor($invoiceDate);
         $typeLabel = $charge->typeLabel();
         $detail = filled($charge->notes) ? trim((string) $charge->notes) : null;
         $notes = $detail ? $typeLabel.': '.$detail : $typeLabel;
@@ -679,7 +679,7 @@ class AgreementInvoiceService
         }
 
         $invoiceDate = $agreement->start_date->copy()->startOfDay();
-        $dueDate = $invoiceDate->copy()->addDays(5);
+        $dueDate = Invoice::dueDateFor($invoiceDate);
 
         $invoice = Invoice::query()
             ->where('invoice_type', 'agreement_deposit')
@@ -744,7 +744,7 @@ class AgreementInvoiceService
             return false;
         }
 
-        $dueDate = $invoiceDate->copy()->addDays(5);
+        $dueDate = Invoice::dueDateFor($invoiceDate);
         $discountAmount = $this->discountAmountForNewRentInvoice($agreement, $subtotal);
         $totalAmount = round(max($subtotal - $discountAmount, 0), 2);
 
@@ -783,7 +783,7 @@ class AgreementInvoiceService
             return false;
         }
 
-        $dueDate = $invoiceDate->copy()->addDays(5);
+        $dueDate = Invoice::dueDateFor($invoiceDate);
 
         $invoice = Invoice::create([
             'driver_id' => $agreement->driver_id,
@@ -822,7 +822,7 @@ class AgreementInvoiceService
         $subtotal = (float) $agreement->agreed_rent;
         $discountAmount = $this->discountAmountForNewRentInvoice($agreement, $subtotal);
         $totalAmount = round(max($subtotal - $discountAmount, 0), 2);
-        $dueDate = $invoiceDate->copy()->addDays(5);
+        $dueDate = Invoice::dueDateFor($invoiceDate);
 
         $invoice = Invoice::create([
             'driver_id' => $agreement->driver_id,

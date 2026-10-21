@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Agreement;
 use App\Models\Car;
+use App\Models\CarInsurance;
 use App\Models\Company;
+use App\Models\InsuranceProvider;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -16,7 +18,7 @@ class VehicleClaimsContextController extends Controller
         $tenantId = (int) $request->attributes->get('claims_tenant_id');
 
         $car = Car::query()
-            ->with(['company.country'])
+            ->with(['company.country', 'insurances.status', 'insurances.insuranceProvider'])
             ->where('tenant_id', $tenantId)
             ->find($id);
 
@@ -34,7 +36,7 @@ class VehicleClaimsContextController extends Controller
 
         return response()->json([
             'data' => [
-                'insurance' => $this->insurancePayload($agreement),
+                'insurance' => $this->agreementInsurancePayload($agreement) ?? $this->carInsurancePayload($car),
                 'company' => $this->companyPayload($car->company),
             ],
         ]);
@@ -43,7 +45,7 @@ class VehicleClaimsContextController extends Controller
     /**
      * @return array<string, mixed>|null
      */
-    private function insurancePayload(?Agreement $agreement): ?array
+    private function agreementInsurancePayload(?Agreement $agreement): ?array
     {
         if (! $agreement) {
             return null;
@@ -63,10 +65,42 @@ class VehicleClaimsContextController extends Controller
                 'insurer_name' => $name !== '' ? $name : null,
                 'policy_number' => $policy !== '' ? $policy : null,
                 'insurance_type' => $type !== '' ? $type : null,
+                'insurer_email' => null,
             ];
         }
 
-        $provider = $agreement->insuranceProvider;
+        return $this->providerInsurancePayload($agreement->insuranceProvider);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function carInsurancePayload(Car $car): ?array
+    {
+        $active = $car->currentActiveInsurance();
+        if ($active) {
+            $payload = $this->providerInsurancePayload($active->insuranceProvider);
+            if ($payload) {
+                return $payload;
+            }
+        }
+
+        $record = $car->insurances
+            ->filter(fn (CarInsurance $insurance) => $insurance->insuranceProvider)
+            ->sortByDesc(fn (CarInsurance $insurance) => [
+                optional($insurance->expiry_date)->timestamp ?? 0,
+                $insurance->id,
+            ])
+            ->first();
+
+        return $record ? $this->providerInsurancePayload($record->insuranceProvider) : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function providerInsurancePayload(?InsuranceProvider $provider): ?array
+    {
         if (! $provider) {
             return null;
         }
@@ -74,8 +108,9 @@ class VehicleClaimsContextController extends Controller
         $name = trim((string) ($provider->provider_name ?? ''));
         $policy = trim((string) ($provider->policy_number ?? ''));
         $type = trim((string) ($provider->insurance_type ?? ''));
+        $email = trim((string) ($provider->email ?? ''));
 
-        if ($name === '' && $policy === '' && $type === '') {
+        if ($name === '' && $policy === '' && $type === '' && $email === '') {
             return null;
         }
 
@@ -84,6 +119,7 @@ class VehicleClaimsContextController extends Controller
             'insurer_name' => $name !== '' ? $name : null,
             'policy_number' => $policy !== '' ? $policy : null,
             'insurance_type' => $type !== '' ? $type : null,
+            'insurer_email' => $email !== '' ? $email : null,
         ];
     }
 

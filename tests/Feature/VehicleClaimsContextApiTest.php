@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Agreement;
 use App\Models\Car;
+use App\Models\CarInsurance;
 use App\Models\Company;
 use App\Models\Driver;
 use App\Models\InsuranceProvider;
@@ -91,10 +92,32 @@ class VehicleClaimsContextApiTest extends TestCase
             $table->id();
             $table->foreignId('company_id')->nullable();
             $table->string('provider_name')->nullable();
+            $table->string('email')->nullable();
             $table->string('insurance_type')->nullable();
             $table->string('policy_number')->nullable();
             $table->foreignId('tenant_id')->nullable();
             $table->timestamps();
+        });
+
+        Schema::table('car_insurances', function (Blueprint $table) {
+            if (! Schema::hasColumn('car_insurances', 'tenant_id')) {
+                $table->foreignId('tenant_id')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'insurance_provider_id')) {
+                $table->foreignId('insurance_provider_id')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'start_date')) {
+                $table->date('start_date')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'expiry_date')) {
+                $table->date('expiry_date')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'notify_before_expiry')) {
+                $table->integer('notify_before_expiry')->nullable();
+            }
+            if (! Schema::hasColumn('car_insurances', 'status_id')) {
+                $table->foreignId('status_id')->nullable();
+            }
         });
     }
 
@@ -187,5 +210,133 @@ class VehicleClaimsContextApiTest extends TestCase
         $response = $this->getJson('/api/v1/vehicles/99999/claims-context', $this->claimsHeaders());
 
         $response->assertNotFound();
+    }
+
+    public function test_falls_back_to_active_car_insurance_when_agreement_has_none(): void
+    {
+        $this->createAgreementWithoutInsurance();
+        $this->createCarInsurance([
+            'provider_name' => 'Vehicle Cover Ltd',
+            'policy_number' => 'CAR-555',
+            'insurance_type' => 'Comprehensive',
+            'email' => 'claims@vehiclecover.test',
+        ]);
+
+        $response = $this->getJson("/api/v1/vehicles/{$this->car->id}/claims-context", $this->claimsHeaders());
+
+        $response->assertOk();
+        $response->assertJsonPath('data.insurance.source', 'company');
+        $response->assertJsonPath('data.insurance.insurer_name', 'Vehicle Cover Ltd');
+        $response->assertJsonPath('data.insurance.policy_number', 'CAR-555');
+        $response->assertJsonPath('data.insurance.insurance_type', 'Comprehensive');
+        $response->assertJsonPath('data.insurance.insurer_email', 'claims@vehiclecover.test');
+    }
+
+    public function test_prefers_agreement_insurance_over_car_insurance(): void
+    {
+        $driver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Test',
+            'last_name' => 'Driver',
+        ]);
+        $status = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
+        $agreementProvider = InsuranceProvider::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'provider_name' => 'Agreement Insurer',
+            'policy_number' => 'AGR-111',
+            'insurance_type' => 'Third Party',
+            'email' => 'agreement@insurer.test',
+        ]);
+
+        Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $this->car->id,
+            'status_id' => $status->id,
+            'start_date' => '2025-01-01',
+            'end_date' => '2026-01-01',
+            'agreed_rent' => 100,
+            'rent_interval' => 'weekly',
+            'using_own_insurance' => false,
+            'insurance_provider_id' => $agreementProvider->id,
+        ]);
+
+        $this->createCarInsurance([
+            'provider_name' => 'Car Policy Insurer',
+            'policy_number' => 'CAR-999',
+            'insurance_type' => 'Comprehensive',
+            'email' => 'car@insurer.test',
+        ]);
+
+        $response = $this->getJson("/api/v1/vehicles/{$this->car->id}/claims-context", $this->claimsHeaders());
+
+        $response->assertOk();
+        $response->assertJsonPath('data.insurance.source', 'company');
+        $response->assertJsonPath('data.insurance.insurer_name', 'Agreement Insurer');
+        $response->assertJsonPath('data.insurance.policy_number', 'AGR-111');
+        $response->assertJsonPath('data.insurance.insurance_type', 'Third Party');
+        $response->assertJsonPath('data.insurance.insurer_email', 'agreement@insurer.test');
+    }
+
+    public function test_returns_null_insurance_when_no_agreement_and_no_car_insurance(): void
+    {
+        $response = $this->getJson("/api/v1/vehicles/{$this->car->id}/claims-context", $this->claimsHeaders());
+
+        $response->assertOk();
+        $response->assertJsonPath('data.insurance', null);
+        $response->assertJsonPath('data.company.name', 'Fleet Co Ltd');
+    }
+
+    /**
+     * @param  array<string, mixed>  $providerAttrs
+     * @param  array<string, mixed>  $insuranceAttrs
+     */
+    private function createCarInsurance(array $providerAttrs = [], array $insuranceAttrs = []): CarInsurance
+    {
+        $status = Status::query()->create(['name' => 'Active', 'type' => 'insurance']);
+        $provider = InsuranceProvider::query()->create(array_merge([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'provider_name' => 'Car Policy Insurer',
+            'policy_number' => 'CAR-POL-1',
+            'insurance_type' => 'Comprehensive',
+            'email' => 'car@insurer.test',
+        ], $providerAttrs));
+
+        return CarInsurance::query()->create(array_merge([
+            'tenant_id' => $this->tenant->id,
+            'car_id' => $this->car->id,
+            'insurance_provider_id' => $provider->id,
+            'start_date' => now()->subMonth()->toDateString(),
+            'expiry_date' => now()->addYear()->toDateString(),
+            'status_id' => $status->id,
+            'notify_before_expiry' => 30,
+        ], $insuranceAttrs));
+    }
+
+    private function createAgreementWithoutInsurance(): Agreement
+    {
+        $driver = Driver::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'first_name' => 'Test',
+            'last_name' => 'Driver',
+        ]);
+        $status = Status::query()->create(['name' => 'Active', 'type' => 'agreement']);
+
+        return Agreement::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'company_id' => $this->company->id,
+            'driver_id' => $driver->id,
+            'car_id' => $this->car->id,
+            'status_id' => $status->id,
+            'start_date' => '2025-01-01',
+            'end_date' => '2026-01-01',
+            'agreed_rent' => 100,
+            'rent_interval' => 'weekly',
+            'using_own_insurance' => false,
+            'insurance_provider_id' => null,
+        ]);
     }
 }

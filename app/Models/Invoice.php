@@ -10,6 +10,13 @@ class Invoice extends Model
 {
     use HasFactory;
 
+    public const DUE_AFTER_DAYS = 2;
+
+    public static function dueDateFor(\Carbon\CarbonInterface|string $invoiceDate): \Carbon\Carbon
+    {
+        return \Carbon\Carbon::parse($invoiceDate)->startOfDay()->addDays(self::DUE_AFTER_DAYS);
+    }
+
     protected $fillable = [
         'invoice_no',
         'driver_id',
