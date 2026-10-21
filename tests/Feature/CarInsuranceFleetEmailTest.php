@@ -151,7 +151,8 @@ class CarInsuranceFleetEmailTest extends TestCase
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
             return $mail->action === 'add'
                 && $mail->hasTo('insurer@samore.example.com')
-                && $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && ! $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
                 && ($mail->sender['address'] ?? null) === CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL
                 && str_contains($mail->subjectLine, 'Request to Add Vehicles to Fleet Insurance Policy POL-SAM-001')
                 && str_contains($mail->bodyText, 'Samore Traders Ltd')
@@ -176,7 +177,8 @@ class CarInsuranceFleetEmailTest extends TestCase
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) use ($car) {
             return $mail->action === 'remove'
                 && $mail->hasTo('insurer@samore.example.com')
-                && $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && ! $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
                 && ($mail->sender['address'] ?? null) === CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL
                 && str_contains($mail->subjectLine, 'Request to Remove Vehicles from Fleet Insurance Policy POL-SAM-001 '.$car->registration)
                 && str_contains($mail->bodyText, 'remove the following vehicle');
@@ -219,9 +221,32 @@ class CarInsuranceFleetEmailTest extends TestCase
 
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
             return $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && ! $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
                 && ! $mail->hasTo('insurer@samore.example.com');
         });
         Mail::assertSentCount(1);
+    }
+
+    public function test_configured_reply_to_address_is_included(): void
+    {
+        config(['mail.reply_to.address' => 'replies@example.com']);
+        Mail::fake();
+
+        $this->post(route('cars.store'), $this->baseCreatePayload($this->samoreCompany->id, [
+            'has_insurance' => 1,
+            'insurance_provider_id' => $this->samoreProviderId,
+            'insurance_status_id' => $this->appliedInsuranceStatusId,
+            'insurance_applied_date' => now()->toDateString(),
+        ]));
+
+        Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
+            $mail->build();
+
+            return $mail->hasTo('insurer@samore.example.com')
+                && $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && $mail->hasReplyTo('replies@example.com')
+                && $mail->hasReplyTo(CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL);
+        });
     }
 
     public function test_proactive_company_uses_proactive_template_on_add(): void

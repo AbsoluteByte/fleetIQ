@@ -137,4 +137,8 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    'reply_to' => [
+        'address' => env('REPLY_TO_ADDRESS'),
+    ],
+
 ];
