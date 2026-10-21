@@ -47,15 +47,20 @@ class CarInsuranceFleetNotificationService
 
         $body = $this->buildBody($action, $companyKey, $company, $policyNumber, $carModel, $registration, $vehicleLine);
 
-        $recipients = $this->recipients($provider);
-        if ($recipients === []) {
+        [$to, $cc] = $this->recipients($provider);
+        if ($to === []) {
             return;
         }
 
         $sender = $this->senderForCompany($companyKey);
         [$mailer, $useCustomFrom] = $this->resolveMailDelivery($companyKey, $sender);
 
-        Mail::mailer($mailer)->to($recipients)->send(new CarInsuranceFleetChangeMail(
+        $message = Mail::mailer($mailer)->to($to);
+        if ($cc !== []) {
+            $message->cc($cc);
+        }
+
+        $message->send(new CarInsuranceFleetChangeMail(
             $car,
             $provider,
             $action,
@@ -114,20 +119,27 @@ class CarInsuranceFleetNotificationService
     }
 
     /**
-     * @return list<string>
+     * @return array{0: list<string>, 1: list<string>}
      */
     private function recipients(InsuranceProvider $provider): array
     {
-        $emails = [];
-
         $providerEmail = trim((string) ($provider->email ?? ''));
-        if ($providerEmail !== '' && filter_var($providerEmail, FILTER_VALIDATE_EMAIL)) {
-            $emails[] = strtolower($providerEmail);
+        $providerEmail = $providerEmail !== '' && filter_var($providerEmail, FILTER_VALIDATE_EMAIL)
+            ? strtolower($providerEmail)
+            : null;
+
+        $copies = [strtolower(self::INTERNAL_RECIPIENT_EMAIL)];
+
+        if ($providerEmail === null) {
+            return [array_values(array_unique($copies)), []];
         }
 
-        $emails[] = strtolower(self::INTERNAL_RECIPIENT_EMAIL);
+        $copies = array_values(array_filter(
+            array_unique($copies),
+            fn (string $email) => $email !== $providerEmail
+        ));
 
-        return array_values(array_unique($emails));
+        return [[$providerEmail], $copies];
     }
 
     private function buildBody(

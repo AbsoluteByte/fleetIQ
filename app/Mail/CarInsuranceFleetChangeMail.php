@@ -33,21 +33,37 @@ class CarInsuranceFleetChangeMail extends Mailable
                 'action' => $this->action,
             ]);
 
-        if (! is_array($this->sender) || ! filled($this->sender['address'] ?? null)) {
-            return $message;
+        $senderAddress = is_array($this->sender) ? trim((string) ($this->sender['address'] ?? '')) : '';
+
+        if ($senderAddress !== '') {
+            $name = filled($this->sender['name'] ?? null) ? (string) $this->sender['name'] : null;
+
+            $message->replyTo($senderAddress, $name);
+
+            if ($this->useCustomFrom) {
+                $message->from($senderAddress, $name);
+            } elseif ($name !== null) {
+                $message->from((string) config('mail.from.address'), $name);
+            }
         }
 
-        $address = (string) $this->sender['address'];
-        $name = filled($this->sender['name'] ?? null) ? (string) $this->sender['name'] : null;
-
-        $message->replyTo($address, $name);
-
-        if ($this->useCustomFrom) {
-            $message->from($address, $name);
-        } elseif ($name !== null) {
-            $message->from((string) config('mail.from.address'), $name);
-        }
+        $this->addConfiguredReplyTo($message, $senderAddress);
 
         return $message;
+    }
+
+    private function addConfiguredReplyTo(self $message, string $senderAddress): void
+    {
+        $replyTo = trim((string) config('mail.reply_to.address'));
+
+        if ($replyTo === '' || filter_var($replyTo, FILTER_VALIDATE_EMAIL) === false) {
+            return;
+        }
+
+        if ($senderAddress !== '' && strcasecmp($replyTo, $senderAddress) === 0) {
+            return;
+        }
+
+        $message->replyTo($replyTo);
     }
 }
