@@ -7,6 +7,8 @@ use App\Models\InsuranceProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 
 class CarInsuranceFleetChangeMail extends Mailable
 {
@@ -34,36 +36,61 @@ class CarInsuranceFleetChangeMail extends Mailable
             ]);
 
         $senderAddress = is_array($this->sender) ? trim((string) ($this->sender['address'] ?? '')) : '';
+        $senderName = is_array($this->sender) && filled($this->sender['name'] ?? null)
+            ? (string) $this->sender['name']
+            : null;
 
         if ($senderAddress !== '') {
-            $name = filled($this->sender['name'] ?? null) ? (string) $this->sender['name'] : null;
-
-            $message->replyTo($senderAddress, $name);
-
             if ($this->useCustomFrom) {
-                $message->from($senderAddress, $name);
-            } elseif ($name !== null) {
-                $message->from((string) config('mail.from.address'), $name);
+                $message->from($senderAddress, $senderName);
+            } elseif ($senderName !== null) {
+                $message->from((string) config('mail.from.address'), $senderName);
             }
         }
 
-        $this->addConfiguredReplyTo($message, $senderAddress);
+        $replyTo = $this->replyToAddress($senderAddress, $senderName);
+        if ($replyTo !== null) {
+            $message->replyTo($replyTo['address'], $replyTo['name']);
+        }
+
+        $message->withSymfonyMessage(function (Email $email) use ($replyTo) {
+            $email->getHeaders()->addTextHeader('X-MC-PreserveRecipients', 'true');
+
+            if ($replyTo === null) {
+                return;
+            }
+
+            $email->getHeaders()->remove('reply-to');
+            $email->replyTo(new Address($replyTo['address'], $replyTo['name'] ?? ''));
+        });
 
         return $message;
     }
 
-    private function addConfiguredReplyTo(self $message, string $senderAddress): void
+    /**
+     * @return array{address: string, name: ?string}|null
+     */
+    private function replyToAddress(string $senderAddress, ?string $senderName): ?array
     {
-        $replyTo = trim((string) config('mail.reply_to.address'));
+        $company = $this->car->company;
+        $companyEmail = trim((string) ($company?->email ?? ''));
 
-        if ($replyTo === '' || filter_var($replyTo, FILTER_VALIDATE_EMAIL) === false) {
-            return;
+        if ($companyEmail !== '' && filter_var($companyEmail, FILTER_VALIDATE_EMAIL)) {
+            $companyName = trim((string) ($company?->name ?? ''));
+
+            return [
+                'address' => $companyEmail,
+                'name' => $companyName !== '' ? $companyName : null,
+            ];
         }
 
-        if ($senderAddress !== '' && strcasecmp($replyTo, $senderAddress) === 0) {
-            return;
+        if ($senderAddress === '' || filter_var($senderAddress, FILTER_VALIDATE_EMAIL) === false) {
+            return null;
         }
 
-        $message->replyTo($replyTo);
+        return [
+            'address' => $senderAddress,
+            'name' => $senderName,
+        ];
     }
 }

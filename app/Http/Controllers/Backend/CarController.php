@@ -27,12 +27,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class CarController extends Controller
 {
+    /** @var array{sent: bool, action: string, to: list<string>, cc: list<string>, reason: ?string}|null */
+    private ?array $insuranceEmailNotice = null;
+
     protected $url = 'cars.';
 
     protected $dir = 'backend.cars.';
@@ -338,8 +342,9 @@ class CarController extends Controller
                 return $car;
             });
 
-            return redirect()->route($this->url.'index')
-                ->with('success', 'Car added successfully.');
+            return $this->withInsuranceEmailNotice(
+                redirect()->route($this->url.'index')->with('success', 'Car added successfully.')
+            );
 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -847,9 +852,9 @@ class CarController extends Controller
                 return $car;
             });
 
-            return redirect()
-                ->route($this->url.'edit', $updatedCar)
-                ->with('success', 'Car updated successfully.');
+            return $this->withInsuranceEmailNotice(
+                redirect()->route($this->url.'edit', $updatedCar)->with('success', 'Car updated successfully.')
+            );
 
         } catch (\Exception $e) {
             return redirect()->back()
@@ -1902,28 +1907,71 @@ class CarController extends Controller
         $previousStatusName = strtolower(trim((string) $previousStatusName));
 
         DB::afterCommit(function () use ($car, $provider, $newStatusId, $appliedId, $cancelledIds, $previousStatusName, $isNewInsuranceRow) {
+            $sendingAdd = $newStatusId === $appliedId && $isNewInsuranceRow;
+            $sendingRemove = in_array($newStatusId, $cancelledIds, true) && $previousStatusName === 'active';
+
+            if (app()->environment('staging')) {
+                Log::info('Insurance fleet email: checked', [
+                    'car_id' => $car->id,
+                    'provider_id' => $provider->id,
+                    'new_status_id' => $newStatusId,
+                    'previous_status' => $previousStatusName,
+                    'is_new_insurance_row' => $isNewInsuranceRow,
+                    'will_send' => $sendingAdd ? 'add' : ($sendingRemove ? 'remove' : 'no'),
+                ]);
+            }
+
+            if (! $sendingAdd && ! $sendingRemove) {
+                return;
+            }
+
+            $failedNotice = [
+                'sent' => false,
+                'action' => $sendingAdd ? 'add' : 'remove',
+                'to' => [],
+                'cc' => [],
+                'reason' => null,
+            ];
+
             $carForMail = $car->fresh(['company', 'carModel']);
             if (! $carForMail) {
+                if (app()->environment('staging')) {
+                    Log::info('Insurance fleet email: skipped, car was not found', ['car_id' => $car->id]);
+                }
+
+                $failedNotice['reason'] = 'Car was not found.';
+                $this->insuranceEmailNotice = $failedNotice;
+
                 return;
             }
 
             $providerForMail = $provider->fresh();
             if (! $providerForMail) {
+                if (app()->environment('staging')) {
+                    Log::info('Insurance fleet email: skipped, provider was not found', ['provider_id' => $provider->id]);
+                }
+
+                $failedNotice['reason'] = 'Insurance provider was not found.';
+                $this->insuranceEmailNotice = $failedNotice;
+
                 return;
             }
 
             $service = app(CarInsuranceFleetNotificationService::class);
 
-            if ($newStatusId === $appliedId && $isNewInsuranceRow) {
-                $service->notifyApplied($carForMail, $providerForMail);
-
-                return;
-            }
-
-            if (in_array($newStatusId, $cancelledIds, true) && $previousStatusName === 'active') {
-                $service->notifyCancelled($carForMail, $providerForMail);
-            }
+            $this->insuranceEmailNotice = $sendingAdd
+                ? $service->notifyApplied($carForMail, $providerForMail)
+                : $service->notifyCancelled($carForMail, $providerForMail);
         });
+    }
+
+    private function withInsuranceEmailNotice(\Illuminate\Http\RedirectResponse $redirect): \Illuminate\Http\RedirectResponse
+    {
+        if (! is_array($this->insuranceEmailNotice)) {
+            return $redirect;
+        }
+
+        return $redirect->with('insurance_email_notice', $this->insuranceEmailNotice);
     }
 
     /**

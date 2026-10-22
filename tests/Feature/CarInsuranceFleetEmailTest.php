@@ -62,14 +62,17 @@ class CarInsuranceFleetEmailTest extends TestCase
         $this->samoreCompany = Company::query()->create([
             'tenant_id' => $this->tenant->id,
             'name' => 'Samore Traders Ltd',
+            'email' => 'accounts@samore.example.com',
         ]);
         $this->proactiveCompany = Company::query()->create([
             'tenant_id' => $this->tenant->id,
             'name' => 'Proactive Hybrid Corporate Ltd',
+            'email' => 'accounts@proactive.example.com',
         ]);
         $this->genericCompany = Company::query()->create([
             'tenant_id' => $this->tenant->id,
             'name' => 'Acme Motors Ltd',
+            'email' => 'accounts@acme.example.com',
         ]);
 
         $this->carModelId = (int) DB::table('car_models')->insertGetId([
@@ -148,6 +151,18 @@ class CarInsuranceFleetEmailTest extends TestCase
         ]));
 
         $response->assertRedirect(route('cars.index'));
+        $response->assertSessionHas('insurance_email_notice', function (array $notice) {
+            return $notice['sent'] === true
+                && $notice['action'] === 'add'
+                && $notice['to'] === ['insurer@samore.example.com']
+                && in_array(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL, $notice['cc'], true);
+        });
+        session()->flash('insurance_email_notice', session('insurance_email_notice'));
+        $popup = view('backend.cars.partials.insurance-email-notice-modal')->render();
+        $this->assertStringContainsString('The insurance add email was sent.', $popup);
+        $this->assertStringContainsString('insurer@samore.example.com', $popup);
+        $this->assertStringContainsString(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL, $popup);
+        $this->assertStringContainsString('id="insuranceEmailNoticeModal"', $popup);
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
             return $mail->action === 'add'
                 && $mail->hasTo('insurer@samore.example.com')
@@ -174,6 +189,9 @@ class CarInsuranceFleetEmailTest extends TestCase
         ]));
 
         $response->assertRedirect(route('cars.edit', $car));
+        $response->assertSessionHas('insurance_email_notice.sent', true);
+        $response->assertSessionHas('insurance_email_notice.action', 'remove');
+        $response->assertSessionHas('insurance_email_notice.to', ['insurer@samore.example.com']);
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) use ($car) {
             return $mail->action === 'remove'
                 && $mail->hasTo('insurer@samore.example.com')
@@ -205,6 +223,7 @@ class CarInsuranceFleetEmailTest extends TestCase
         ]));
 
         $response->assertRedirect(route('cars.edit', $car));
+        $response->assertSessionMissing('insurance_email_notice');
         Mail::assertNothingSent();
     }
 
@@ -212,7 +231,7 @@ class CarInsuranceFleetEmailTest extends TestCase
     {
         Mail::fake();
 
-        $this->post(route('cars.store'), $this->baseCreatePayload($this->samoreCompany->id, [
+        $response = $this->post(route('cars.store'), $this->baseCreatePayload($this->samoreCompany->id, [
             'has_insurance' => 1,
             'insurance_provider_id' => $this->providerWithoutEmailId,
             'insurance_status_id' => $this->appliedInsuranceStatusId,
@@ -220,6 +239,8 @@ class CarInsuranceFleetEmailTest extends TestCase
         ]));
 
         Mail::assertNothingSent();
+        $response->assertSessionHas('insurance_email_notice.sent', false);
+        $response->assertSessionHas('insurance_email_notice.reason', 'Insurance provider has no email address.');
     }
 
     public function test_blank_provider_email_uses_the_same_policy_provider(): void
@@ -241,7 +262,7 @@ class CarInsuranceFleetEmailTest extends TestCase
         });
     }
 
-    public function test_configured_reply_to_address_is_included(): void
+    public function test_reply_to_is_the_car_company_email(): void
     {
         config(['mail.reply_to.address' => 'replies@example.com']);
         Mail::fake();
@@ -258,8 +279,29 @@ class CarInsuranceFleetEmailTest extends TestCase
 
             return $mail->hasTo('insurer@samore.example.com')
                 && $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
-                && $mail->hasReplyTo('replies@example.com')
-                && $mail->hasReplyTo(CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL);
+                && $mail->hasReplyTo('accounts@samore.example.com')
+                && ! $mail->hasReplyTo('replies@example.com')
+                && ! $mail->hasReplyTo(CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL);
+        });
+    }
+
+    public function test_reply_to_falls_back_to_the_company_sender_when_company_email_is_blank(): void
+    {
+        Mail::fake();
+        $this->samoreCompany->forceFill(['email' => null])->save();
+
+        $this->post(route('cars.store'), $this->baseCreatePayload($this->samoreCompany->id, [
+            'has_insurance' => 1,
+            'insurance_provider_id' => $this->samoreProviderId,
+            'insurance_status_id' => $this->appliedInsuranceStatusId,
+            'insurance_applied_date' => now()->toDateString(),
+        ]));
+
+        Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
+            $mail->build();
+
+            return $mail->hasReplyTo(CarInsuranceFleetNotificationService::SAMORE_SENDER_EMAIL)
+                && ! $mail->hasReplyTo('accounts@samore.example.com');
         });
     }
 
@@ -431,6 +473,7 @@ class CarInsuranceFleetEmailTest extends TestCase
             $table->id();
             $table->foreignId('tenant_id');
             $table->string('name');
+            $table->string('email')->nullable();
             $table->timestamps();
         });
 
