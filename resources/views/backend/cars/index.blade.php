@@ -510,6 +510,7 @@
             </div>
         </div>
     </div>
+    @include('backend.cars.partials.insurance-email-notice-modal')
 @endsection
 @section('css')
     <link rel="stylesheet" href="{{ asset('app-assets/vendors/css/tables/datatable/datatables.min.css') }}">

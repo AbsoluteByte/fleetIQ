@@ -114,6 +114,7 @@
             </div>
         </div>
     </section>
+    @include('backend.cars.partials.insurance-email-notice-modal')
 @endsection
 
 @if($model->isFleetStatusLockedForEditing())

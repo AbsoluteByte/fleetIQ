@@ -6,6 +6,7 @@ use App\Mail\CarInsuranceFleetChangeMail;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\InsuranceProvider;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class CarInsuranceFleetNotificationService
@@ -16,23 +17,38 @@ class CarInsuranceFleetNotificationService
 
     public const PROACTIVE_SENDER_EMAIL = 'proactivehybrid@gmail.com';
 
-    public function notifyApplied(Car $car, InsuranceProvider $provider): void
+    /**
+     * @return array{sent: bool, action: string, to: list<string>, cc: list<string>, reason: ?string}
+     */
+    public function notifyApplied(Car $car, InsuranceProvider $provider): array
     {
-        $this->send($car, $provider, 'add');
+        return $this->send($car, $provider, 'add');
     }
 
-    public function notifyCancelled(Car $car, InsuranceProvider $provider): void
+    /**
+     * @return array{sent: bool, action: string, to: list<string>, cc: list<string>, reason: ?string}
+     */
+    public function notifyCancelled(Car $car, InsuranceProvider $provider): array
     {
-        $this->send($car, $provider, 'remove');
+        return $this->send($car, $provider, 'remove');
     }
 
-    private function send(Car $car, InsuranceProvider $provider, string $action): void
+    /**
+     * @return array{sent: bool, action: string, to: list<string>, cc: list<string>, reason: ?string}
+     */
+    private function send(Car $car, InsuranceProvider $provider, string $action): array
     {
         $car->loadMissing(['company', 'carModel']);
         $company = $car->company;
 
         if (! $company) {
-            return;
+            $this->stagingDebug('skipped, car has no company', [
+                'action' => $action,
+                'car_id' => $car->id,
+                'provider_id' => $provider->id,
+            ]);
+
+            return $this->emailResult($action, false, [], [], 'Car has no company.');
         }
 
         $companyKey = $this->resolveCompanyKey($company);
@@ -49,18 +65,22 @@ class CarInsuranceFleetNotificationService
 
         [$to, $cc] = $this->recipients($provider);
         if ($to === []) {
-            return;
+            $this->stagingDebug('skipped, provider email is missing', [
+                'action' => $action,
+                'car_id' => $car->id,
+                'registration' => $registration,
+                'provider_id' => $provider->id,
+                'provider_email' => $provider->email,
+                'policy_number' => $policyNumber,
+                'company_id' => $provider->company_id,
+            ]);
+
+            return $this->emailResult($action, false, [], [], 'Insurance provider has no email address.');
         }
 
         $sender = $this->senderForCompany($companyKey);
         [$mailer, $useCustomFrom] = $this->resolveMailDelivery($companyKey, $sender);
-
-        $message = Mail::mailer($mailer)->to($to);
-        if ($cc !== []) {
-            $message->cc($cc);
-        }
-
-        $message->send(new CarInsuranceFleetChangeMail(
+        $mail = new CarInsuranceFleetChangeMail(
             $car,
             $provider,
             $action,
@@ -68,7 +88,79 @@ class CarInsuranceFleetNotificationService
             $body,
             $sender,
             $useCustomFrom,
-        ));
+        );
+
+        $this->stagingDebug('sending', [
+            'action' => $action,
+            'car_id' => $car->id,
+            'registration' => $registration,
+            'provider_id' => $provider->id,
+            'to' => $to,
+            'cc' => $cc,
+            'mailer' => $mailer,
+            'use_custom_from' => $useCustomFrom,
+            'from' => $useCustomFrom ? ($sender['address'] ?? null) : config('mail.from.address'),
+            'company_email' => $company->email,
+            'subject' => $subject,
+        ]);
+
+        try {
+            $message = Mail::mailer($mailer)->to($to);
+            if ($cc !== []) {
+                $message->cc($cc);
+            }
+
+            $message->send($mail);
+        } catch (\Throwable $e) {
+            $this->stagingDebug('send failed', [
+                'action' => $action,
+                'car_id' => $car->id,
+                'registration' => $registration,
+                'to' => $to,
+                'cc' => $cc,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->emailResult($action, false, $to, $cc, $e->getMessage());
+        }
+
+        $this->stagingDebug('sent', [
+            'action' => $action,
+            'car_id' => $car->id,
+            'registration' => $registration,
+            'to' => $to,
+            'cc' => $cc,
+        ]);
+
+        return $this->emailResult($action, true, $to, $cc, null);
+    }
+
+    /**
+     * @param  list<string>  $to
+     * @param  list<string>  $cc
+     * @return array{sent: bool, action: string, to: list<string>, cc: list<string>, reason: ?string}
+     */
+    private function emailResult(string $action, bool $sent, array $to, array $cc, ?string $reason): array
+    {
+        return [
+            'sent' => $sent,
+            'action' => $action,
+            'to' => array_values($to),
+            'cc' => array_values($cc),
+            'reason' => $reason,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function stagingDebug(string $message, array $context = []): void
+    {
+        if (! app()->environment('staging')) {
+            return;
+        }
+
+        Log::info('Insurance fleet email: '.$message, $context);
     }
 
     /**
