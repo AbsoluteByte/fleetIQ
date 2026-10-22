@@ -208,7 +208,7 @@ class CarInsuranceFleetEmailTest extends TestCase
         Mail::assertNothingSent();
     }
 
-    public function test_provider_without_email_still_notifies_internal_recipient(): void
+    public function test_provider_without_email_does_not_send_a_jawad_only_email(): void
     {
         Mail::fake();
 
@@ -219,12 +219,26 @@ class CarInsuranceFleetEmailTest extends TestCase
             'insurance_applied_date' => now()->toDateString(),
         ]));
 
+        Mail::assertNothingSent();
+    }
+
+    public function test_blank_provider_email_uses_the_same_policy_provider(): void
+    {
+        Mail::fake();
+        $blankProviderId = $this->createProvider($this->samoreCompany->id, 'POL-SAM-001', null);
+
+        $this->post(route('cars.store'), $this->baseCreatePayload($this->samoreCompany->id, [
+            'has_insurance' => 1,
+            'insurance_provider_id' => $blankProviderId,
+            'insurance_status_id' => $this->appliedInsuranceStatusId,
+            'insurance_applied_date' => now()->toDateString(),
+        ]));
+
         Mail::assertSent(CarInsuranceFleetChangeMail::class, function (CarInsuranceFleetChangeMail $mail) {
-            return $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
-                && ! $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
-                && ! $mail->hasTo('insurer@samore.example.com');
+            return $mail->hasTo('insurer@samore.example.com')
+                && ! $mail->hasTo(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL)
+                && $mail->hasCc(CarInsuranceFleetNotificationService::INTERNAL_RECIPIENT_EMAIL);
         });
-        Mail::assertSentCount(1);
     }
 
     public function test_configured_reply_to_address_is_included(): void

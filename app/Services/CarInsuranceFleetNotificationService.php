@@ -123,23 +123,59 @@ class CarInsuranceFleetNotificationService
      */
     private function recipients(InsuranceProvider $provider): array
     {
-        $providerEmail = trim((string) ($provider->email ?? ''));
-        $providerEmail = $providerEmail !== '' && filter_var($providerEmail, FILTER_VALIDATE_EMAIL)
-            ? strtolower($providerEmail)
-            : null;
-
-        $copies = [strtolower(self::INTERNAL_RECIPIENT_EMAIL)];
+        $providerEmail = $this->providerEmail($provider);
 
         if ($providerEmail === null) {
-            return [array_values(array_unique($copies)), []];
+            return [[], []];
         }
 
         $copies = array_values(array_filter(
-            array_unique($copies),
+            [strtolower(self::INTERNAL_RECIPIENT_EMAIL)],
             fn (string $email) => $email !== $providerEmail
         ));
 
         return [[$providerEmail], $copies];
+    }
+
+    private function providerEmail(InsuranceProvider $provider): ?string
+    {
+        $email = $this->validEmail($provider->email ?? null);
+        if ($email !== null) {
+            return $email;
+        }
+
+        $policyNumber = trim((string) $provider->policy_number);
+        if ($policyNumber === '' || ! $provider->company_id) {
+            return null;
+        }
+
+        $candidates = InsuranceProvider::query()
+            ->where('company_id', $provider->company_id)
+            ->where('policy_number', $policyNumber)
+            ->when($provider->tenant_id, fn ($query) => $query->where('tenant_id', $provider->tenant_id))
+            ->where('id', '!=', $provider->id)
+            ->orderBy('id')
+            ->pluck('email');
+
+        foreach ($candidates as $candidate) {
+            $email = $this->validEmail($candidate);
+            if ($email !== null) {
+                return $email;
+            }
+        }
+
+        return null;
+    }
+
+    private function validEmail(mixed $email): ?string
+    {
+        $email = trim((string) $email);
+
+        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return null;
+        }
+
+        return strtolower($email);
     }
 
     private function buildBody(
