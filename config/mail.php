@@ -139,6 +139,7 @@ return [
 
     'reply_to' => [
         'address' => env('REPLY_TO_ADDRESS'),
+        'name' => env('REPLY_TO_NAME'),
     ],
 
 ];
