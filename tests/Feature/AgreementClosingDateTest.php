@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Agreement;
+use App\Models\AgreementActivityLog;
 use App\Models\Car;
 use App\Models\Company;
 use App\Models\Driver;
@@ -96,6 +97,7 @@ class AgreementClosingDateTest extends TestCase
     protected function tearDown(): void
     {
         Carbon::setTestNow();
+        Schema::dropIfExists('agreement_activity_logs');
         Schema::dropIfExists('driver_credit_transaction_lines');
         Schema::dropIfExists('driver_credit_transactions');
         Schema::dropIfExists('agreement_collections');
@@ -173,6 +175,30 @@ class AgreementClosingDateTest extends TestCase
         $agreement->refresh();
         $this->assertSame($this->terminatedStatus->id, $agreement->status_id);
         $this->assertSame('2026-06-20 11:00:00', $agreement->closing_date->format('Y-m-d H:i:s'));
+    }
+
+    public function test_terminating_an_agreement_writes_an_activity_log(): void
+    {
+        $this->createActivityLogTable();
+        $this->user->update(['name' => 'Jawad Samore']);
+        $agreement = $this->createActiveAgreement();
+
+        $response = $this->put(route('agreements.update', $agreement), $this->basePayload([
+            'status_id' => $this->terminatedStatus->id,
+            'closing_date' => '2026-06-20T11:00',
+        ]));
+
+        $response->assertRedirect(route('agreements.index'));
+        $response->assertSessionHasNoErrors();
+
+        $log = AgreementActivityLog::query()->where('agreement_id', $agreement->id)->first();
+        $this->assertNotNull($log);
+        $this->assertSame($this->user->id, $log->user_id);
+        $this->assertSame(
+            'Jawad Samore updated the agreement and changed the status from Active to Terminated.',
+            $log->summary
+        );
+        $this->assertContains('Status: Active → Terminated', $log->changeLines());
     }
 
     public function test_same_day_closure_removes_current_rent_invoice_only(): void
@@ -418,6 +444,19 @@ class AgreementClosingDateTest extends TestCase
         ], $overrides);
     }
 
+    private function createActivityLogTable(): void
+    {
+        Schema::create('agreement_activity_logs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('agreement_id')->index();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('action', 40);
+            $table->text('summary');
+            $table->json('changes')->nullable();
+            $table->timestamps();
+        });
+    }
+
     private function createActiveAgreement(): Agreement
     {
         return Agreement::query()->create([
@@ -484,16 +523,18 @@ class AgreementClosingDateTest extends TestCase
             $table->timestamps();
         });
 
-        Schema::create('car_status_histories', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id')->nullable();
-            $table->foreignId('car_id');
-            $table->string('previous_status')->nullable();
-            $table->string('new_status');
-            $table->json('status_data')->nullable();
-            $table->unsignedBigInteger('changed_by')->nullable();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('car_status_histories')) {
+            Schema::create('car_status_histories', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tenant_id')->nullable();
+                $table->foreignId('car_id');
+                $table->string('previous_status')->nullable();
+                $table->string('new_status');
+                $table->json('status_data')->nullable();
+                $table->unsignedBigInteger('changed_by')->nullable();
+                $table->timestamps();
+            });
+        }
 
         Schema::create('agreement_collections', function (Blueprint $table) {
             $table->id();

@@ -117,6 +117,7 @@ class AgreementUpgradeService
 
             $originalEndDate = $old->end_date;
             $transferDiscount = ! $old->discount_is_one_time || $old->hasPendingOneTimeDiscount();
+            $activityBefore = app(AgreementActivityLogger::class)->snapshot($old);
 
             $old->update([
                 'status_id' => $terminatedStatus->id,
@@ -189,6 +190,18 @@ class AgreementUpgradeService
             $this->invoiceService->generateForAgreement(
                 $newAgreement->fresh(['upgradedFromAgreement', 'status']),
                 $changeDate
+            );
+
+            $logger = app(AgreementActivityLogger::class);
+            $logger->changed(
+                $old,
+                $activityBefore,
+                'swapped',
+                'swapped the vehicle and terminated this agreement. New agreement #'.$newAgreement->id.'.'
+            );
+            $logger->created(
+                $newAgreement,
+                'created this agreement from a vehicle swap of agreement #'.$old->id.'.'
             );
 
             return $newAgreement->fresh(['upgradedFromAgreement', 'status']);
@@ -285,6 +298,7 @@ class AgreementUpgradeService
             }
 
             $transferDiscount = ! $old->discount_is_one_time || $old->hasPendingOneTimeDiscount();
+            $activityBefore = app(AgreementActivityLogger::class)->snapshot($old);
 
             $old->update([
                 'status_id' => $expiredStatus->id,
@@ -345,6 +359,18 @@ class AgreementUpgradeService
             $this->invoiceService->generateForAgreement($newAgreement);
             app(DriverAgreementStatusService::class)->syncForAgreement($newAgreement);
             app(CarFleetRentStatusService::class)->syncForAgreement($newAgreement, (int) $old->car_id, Auth::id());
+
+            $logger = app(AgreementActivityLogger::class);
+            $logger->changed(
+                $old,
+                $activityBefore,
+                'renewed',
+                'renewed the agreement. New agreement #'.$newAgreement->id.'.'
+            );
+            $logger->created(
+                $newAgreement,
+                'created this agreement by renewing agreement #'.$old->id.'.'
+            );
 
             return $newAgreement;
         });

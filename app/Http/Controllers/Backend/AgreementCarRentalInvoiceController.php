@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Agreement;
 use App\Models\BankAccount;
+use App\Services\AgreementActivityLogger;
 use App\Services\AgreementCarRentalInvoiceService;
 use App\Services\AgreementPdfService;
 use Illuminate\Http\Request;
@@ -79,6 +80,7 @@ class AgreementCarRentalInvoiceController extends Controller
 
         try {
             $record = $service->upsert($agreement, $validated, Auth::user());
+            app(AgreementActivityLogger::class)->record($agreement, 'car_rental_invoice', 'saved the car rental invoice.');
             [$pdf, $filename] = app(AgreementPdfService::class)->makeCarRentalInvoicePdf($record);
 
             return $pdf->stream($filename);
