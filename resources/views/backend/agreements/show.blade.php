@@ -5,8 +5,25 @@
         .header-navbar-shadow {
             height: 80px !important;
         }
-        .btn-group > form .btn {
-            border-radius: 0 !important;
+        .agreement-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .agreement-actions__row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .agreement-actions__row > form {
+            display: inline-flex;
+            margin: 0;
+        }
+        .agreement-actions__row .btn {
+            border-radius: 0.25rem !important;
+            white-space: nowrap;
         }
         .agreement-discount-summary {
             padding: 14px;
@@ -32,11 +49,12 @@
             <i class="fa fa-handshake me-2"></i>
             Agreement Details
         </h1>
-        <div class="btn-group">
+        <div class="agreement-actions">
             @php
                 $agreementIsSigned = $agreement->hellosign_status === 'signed'
                     || (! empty($latestSignatureToken) && $latestSignatureToken->isSigned());
             @endphp
+            <div class="agreement-actions__row">
             <a href="{{ route('agreements.pdf.preview', $agreement) }}" class="btn btn-outline-danger" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-eye me-2"></i>
                 Preview
@@ -106,6 +124,8 @@
                 <i class="fa fa-file-text-o me-2"></i>
                 Car Rental Invoice
             </a>
+            </div>
+            <div class="agreement-actions__row">
             @if(!empty($agreement->driver?->email))
             <form action="{{ route('agreements.send-client-documents', $agreement) }}" method="POST" class="d-inline">
                 @csrf
@@ -156,6 +176,12 @@
                     </button>
                 @endif
             @endif
+            @if(!empty($canViewAgreementLogs))
+                <button type="button" class="btn btn-outline-dark" data-toggle="modal" data-target="#agreementActivityLogsModal">
+                    <i class="fa fa-history me-2"></i>
+                    View logs
+                </button>
+            @endif
             <a href="{{ route('agreements.edit', $agreement) }}" class="btn btn-warning">
                 <i class="fa fa-edit me-2"></i>
                 Edit
@@ -164,6 +190,7 @@
                 <i class="fa fa-arrow-left me-2"></i>
                 Back
             </a>
+            </div>
         </div>
     </div>
 
@@ -977,6 +1004,7 @@
     </div>
 
     @include('backend.agreements.partials.refund-deposit-modal', ['bankAccounts' => $bankAccounts ?? collect()])
+    @include('backend.agreements.partials.activity-logs-modal')
 @endsection
 
 @section('js')

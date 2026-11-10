@@ -140,6 +140,7 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::post('drivers/{driver}/invite', [App\Http\Controllers\Backend\DriverController::class, 'invite'])->name('drivers.invite');
     Route::post('drivers/{driver}/resend-invitation', [App\Http\Controllers\Backend\DriverController::class, 'resendInvitation'])->name('drivers.resend-invitation');
 
+    Route::get('agreements/{agreement}/activity-logs', [App\Http\Controllers\Backend\AgreementController::class, 'activityLogs'])->name('agreements.activity-logs');
     Route::get('agreements/{agreement}/renew', [App\Http\Controllers\Backend\AgreementController::class, 'renew'])->name('agreements.renew');
     Route::post('agreements/{agreement}/renew', [App\Http\Controllers\Backend\AgreementController::class, 'storeRenew'])->name('agreements.renew.store');
     Route::resource('agreements', App\Http\Controllers\Backend\AgreementController::class);
@@ -232,6 +233,11 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     Route::post('agreements/{agreement}/regenerate-collections', function (\App\Models\Agreement $agreement) {
         $agreement->generateCollections();
+        app(\App\Services\AgreementActivityLogger::class)->record(
+            $agreement,
+            'collections_regenerated',
+            'regenerated the collections.'
+        );
 
         return response()->json(['success' => true]);
     })->name('agreements.regenerate-collections');

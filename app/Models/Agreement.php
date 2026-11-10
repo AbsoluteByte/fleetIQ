@@ -632,6 +632,11 @@ class Agreement extends Model
         return $this->belongsTo(User::class, 'termination_recorded_by');
     }
 
+    public function activityLogs()
+    {
+        return $this->hasMany(AgreementActivityLog::class)->latest();
+    }
+
     public function insuranceProvider()
     {
         return $this->belongsTo(InsuranceProvider::class);

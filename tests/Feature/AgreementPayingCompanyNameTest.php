@@ -96,6 +96,9 @@ class AgreementPayingCompanyNameTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('agreement_activity_logs');
+        Schema::dropIfExists('agreement_signature_tokens');
+        Schema::dropIfExists('agreement_additional_charges');
         Schema::dropIfExists('bank_accounts');
         Schema::dropIfExists('deposit_refunds');
         Schema::dropIfExists('agreement_deductions');
@@ -159,6 +162,54 @@ class AgreementPayingCompanyNameTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Pays via: Metro Cars PLC', false);
+    }
+
+    public function test_only_admins_can_view_agreement_activity_logs(): void
+    {
+        Schema::create('agreement_activity_logs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('agreement_id')->index();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('action', 40);
+            $table->text('summary');
+            $table->json('changes')->nullable();
+            $table->timestamps();
+        });
+
+        $agreement = $this->createAgreement();
+
+        $this->get(route('agreements.show', $agreement))
+            ->assertOk()
+            ->assertSee('View logs', false);
+
+        $this->get(route('agreements.activity-logs', $agreement))->assertOk();
+
+        $staff = User::factory()->create(['name' => 'Staff User']);
+        $staff->tenants()->attach($this->tenant->id, [
+            'role' => 'user',
+            'is_primary' => true,
+            'joined_at' => now(),
+        ]);
+        $this->actingAs($staff);
+        $staff->switchTenant($this->tenant->id);
+
+        $this->get(route('agreements.show', $agreement))
+            ->assertOk()
+            ->assertDontSee('View logs', false);
+
+        $this->get(route('agreements.activity-logs', $agreement))->assertForbidden();
+
+        $otherTenant = Tenant::query()->create([
+            'company_name' => 'Other Tenant',
+            'status' => Tenant::STATUS_ACTIVE,
+        ]);
+        $otherAgreement = $this->createAgreement([
+            'tenant_id' => $otherTenant->id,
+        ]);
+        $this->actingAs($this->user);
+        $this->user->switchTenant($this->tenant->id);
+
+        $this->get(route('agreements.activity-logs', $otherAgreement))->assertForbidden();
     }
 
     public function test_paying_company_name_longer_than_255_characters_is_rejected(): void
@@ -231,16 +282,36 @@ class AgreementPayingCompanyNameTest extends TestCase
         ]);
 
         Schema::table('drivers', function (Blueprint $table) {
-            $table->date('dob')->nullable();
-            $table->string('address1')->nullable();
-            $table->string('post_code')->nullable();
-            $table->string('town')->nullable();
-            $table->foreignId('country_id')->nullable();
-            $table->string('driver_license_number')->nullable();
-            $table->date('driver_license_expiry_date')->nullable();
-            $table->string('next_of_kin')->nullable();
-            $table->string('next_of_kin_phone')->nullable();
-            $table->boolean('is_active')->default(true);
+            if (! Schema::hasColumn('drivers', 'dob')) {
+                $table->date('dob')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'address1')) {
+                $table->string('address1')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'post_code')) {
+                $table->string('post_code')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'town')) {
+                $table->string('town')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'country_id')) {
+                $table->foreignId('country_id')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'driver_license_number')) {
+                $table->string('driver_license_number')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'driver_license_expiry_date')) {
+                $table->date('driver_license_expiry_date')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'next_of_kin')) {
+                $table->string('next_of_kin')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'next_of_kin_phone')) {
+                $table->string('next_of_kin_phone')->nullable();
+            }
+            if (! Schema::hasColumn('drivers', 'is_active')) {
+                $table->boolean('is_active')->default(true);
+            }
         });
 
         Schema::table('agreements', function (Blueprint $table) {
@@ -284,16 +355,18 @@ class AgreementPayingCompanyNameTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        Schema::create('car_status_histories', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tenant_id')->nullable();
-            $table->foreignId('car_id');
-            $table->string('previous_status')->nullable();
-            $table->string('new_status');
-            $table->json('status_data')->nullable();
-            $table->unsignedBigInteger('changed_by')->nullable();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('car_status_histories')) {
+            Schema::create('car_status_histories', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('tenant_id')->nullable();
+                $table->foreignId('car_id');
+                $table->string('previous_status')->nullable();
+                $table->string('new_status');
+                $table->json('status_data')->nullable();
+                $table->unsignedBigInteger('changed_by')->nullable();
+                $table->timestamps();
+            });
+        }
 
         Schema::create('agreement_collections', function (Blueprint $table) {
             $table->id();
@@ -307,6 +380,31 @@ class AgreementPayingCompanyNameTest extends TestCase
             $table->date('payment_date')->nullable();
             $table->text('notes')->nullable();
             $table->boolean('is_auto_generated')->default(false);
+            $table->timestamps();
+        });
+
+        Schema::create('agreement_additional_charges', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('tenant_id')->nullable();
+            $table->unsignedBigInteger('agreement_id');
+            $table->string('type')->nullable();
+            $table->decimal('amount', 12, 2)->default(0);
+            $table->text('notes')->nullable();
+            $table->unsignedBigInteger('invoice_id')->nullable();
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('agreement_signature_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('agreement_id');
+            $table->string('token')->nullable();
+            $table->string('signer_email')->nullable();
+            $table->string('signer_name')->nullable();
+            $table->string('status')->default('pending');
+            $table->timestamp('signed_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
             $table->timestamps();
         });
 

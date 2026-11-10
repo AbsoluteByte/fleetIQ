@@ -15,6 +15,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Status;
 use App\Models\Tenant;
+use App\Services\AgreementActivityLogger;
 use App\Services\AgreementClientDocumentsService;
 use App\Services\AgreementDepositSettlementService;
 use App\Services\AgreementIndexService;
@@ -387,6 +388,8 @@ class AgreementController extends Controller
 
             app(CarFleetRentStatusService::class)->syncForAgreement($agreement, null, Auth::id());
 
+            app(AgreementActivityLogger::class)->created($agreement);
+
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement created successfully.');
 
@@ -432,6 +435,10 @@ class AgreementController extends Controller
         $canManageInvoices = strtolower(trim((string) Auth::user()?->email)) === 'jawad@samoretraders.com';
         $canResetAgreementSignature = app(AgreementESignAuthorizationService::class)->canResetSignedAgreement();
         $latestSignatureToken = $agreement->getLatestSignatureToken();
+        $canViewAgreementLogs = $this->canViewAgreementLogs() && Schema::hasTable('agreement_activity_logs');
+        $agreementActivityLogs = $canViewAgreementLogs
+            ? $agreement->activityLogs()->with('user')->get()
+            : collect();
 
         return view($this->dir.'show', compact(
             'agreement',
@@ -440,7 +447,9 @@ class AgreementController extends Controller
             'settlementRemainingDebt',
             'canManageInvoices',
             'canResetAgreementSignature',
-            'latestSignatureToken'
+            'latestSignatureToken',
+            'canViewAgreementLogs',
+            'agreementActivityLogs'
         ));
     }
 
@@ -555,6 +564,8 @@ class AgreementController extends Controller
 
         $settlementService->record($agreement, $validated, $paymentAllocationService);
 
+        app(AgreementActivityLogger::class)->record($agreement, 'deposit_settlement', 'recorded the deposit settlement.');
+
         return redirect()->back()
             ->with('success', 'Deposit settlement recorded. It will appear on the daily financial sheet until approval.');
     }
@@ -657,6 +668,7 @@ class AgreementController extends Controller
         }
 
         try {
+            $activityBefore = app(AgreementActivityLogger::class)->snapshot($agreement);
             $previousDriverId = $agreement->driver_id;
             $previousCarId = (int) $agreement->car_id;
 
@@ -755,6 +767,8 @@ class AgreementController extends Controller
                 Auth::id()
             );
 
+            app(AgreementActivityLogger::class)->updated($updatedAgreement, $activityBefore);
+
             return redirect()->route('agreements.index')
                 ->with('success', 'Agreement updated successfully.');
 
@@ -777,6 +791,8 @@ class AgreementController extends Controller
                 abort(403, 'Unauthorized access');
             }
             DB::transaction(function () use ($agreement) {
+                app(AgreementActivityLogger::class)->record($agreement, 'deleted', 'deleted the agreement.');
+
                 foreach ($agreement->ownInsuranceProofFileNames() as $name) {
                     $this->deleteInsuranceProofFile($name);
                 }
@@ -2053,6 +2069,12 @@ class AgreementController extends Controller
                 $collection->update(['notes' => $validated['notes']]);
             }
 
+            app(AgreementActivityLogger::class)->record(
+                $agreement,
+                'collection_paid',
+                'recorded a collection payment of £'.number_format((float) $validated['amount_paid'], 2).'.'
+            );
+
             return redirect()->back()->with('success', 'Payment recorded successfully.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Error recording payment: '.$e->getMessage());
@@ -2154,6 +2176,8 @@ class AgreementController extends Controller
                     $payload['attachedLabels'],
                     $payload['missingDocuments']
                 ));
+
+            app(AgreementActivityLogger::class)->record($agreement, 'client_documents_sent', 'sent the client documents email.');
 
             $sentCount = count($payload['attachments']);
             $missingCount = count($payload['missingDocuments']);
@@ -2320,6 +2344,8 @@ class AgreementController extends Controller
                 'esign_sent_at' => now(),
             ]);
 
+            app(AgreementActivityLogger::class)->record($agreement, 'esign_sent', 'sent the agreement for signature.');
+
             return redirect()->route('agreements.show', $agreement)
                 ->with('success', '✅ Agreement sent via HelloSign! Driver will receive email.');
         }
@@ -2337,6 +2363,8 @@ class AgreementController extends Controller
         $result = $customSigningService->sendForSigning($agreement);
 
         if ($result['success']) {
+            app(AgreementActivityLogger::class)->record($agreement, 'esign_sent', 'sent the agreement for signature.');
+
             return redirect()->route('agreements.show', $agreement)
                 ->with('success', 'Agreement sent for signature! Driver will receive email with signing link.');
         }
@@ -2538,6 +2566,8 @@ class AgreementController extends Controller
 
         $resetService->reset($agreement);
 
+        app(AgreementActivityLogger::class)->record($agreement, 'esign_reset', 'removed the signature.');
+
         return redirect()->route('agreements.show', $agreement)
             ->with('success', 'Signature removed. You can send the agreement for signing again.');
     }
@@ -2592,6 +2622,8 @@ class AgreementController extends Controller
             );
 
             if ($result['success']) {
+                app(AgreementActivityLogger::class)->record($agreement, 'esign_resent', 'resent the signature request.');
+
                 return redirect()->back()
                     ->with('success', 'Signature reminder sent to driver successfully!');
             }
@@ -2621,6 +2653,8 @@ class AgreementController extends Controller
             $result = $customSigningService->resendSigningLink($agreement);
 
             if ($result['success']) {
+                app(AgreementActivityLogger::class)->record($agreement, 'esign_resent', 'resent the signature request.');
+
                 return redirect()->back()
                     ->with('success', 'Signing link resent successfully!');
             }
@@ -2725,17 +2759,21 @@ class AgreementController extends Controller
                             'esign_completed_at' => now(),
                         ]);
 
+                        app(AgreementActivityLogger::class)->record($agreement, 'esign_signed', 'marked the agreement as signed.', [], true);
+
                         \Log::info('Agreement signed via webhook: '.$agreement->id);
                     }
                     break;
 
                 case 'signature_request_declined':
                     $agreement->update(['hellosign_status' => 'declined']);
+                    app(AgreementActivityLogger::class)->record($agreement, 'esign_declined', 'marked the agreement as declined.', [], true);
                     \Log::info('Agreement declined: '.$agreement->id);
                     break;
 
                 case 'signature_request_canceled':
                     $agreement->update(['hellosign_status' => 'cancelled']);
+                    app(AgreementActivityLogger::class)->record($agreement, 'esign_cancelled', 'marked the agreement as cancelled.', [], true);
                     \Log::info('Agreement cancelled: '.$agreement->id);
                     break;
             }
@@ -2747,6 +2785,39 @@ class AgreementController extends Controller
 
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    public function activityLogs(Agreement $agreement)
+    {
+        $tenant = Auth::user()?->currentTenant();
+
+        if (! $this->canViewAgreementLogs() || ! $tenant || $agreement->tenant_id !== $tenant->id) {
+            abort(403);
+        }
+
+        $logs = Schema::hasTable('agreement_activity_logs')
+            ? $agreement->activityLogs()->with('user')->get()
+            : collect();
+
+        return response()->json([
+            'logs' => $logs->map(fn ($log) => [
+                'summary' => $log->summary,
+                'changes' => $log->changeLines(),
+                'created_at' => $log->created_at?->format('d M Y H:i'),
+                'user' => $log->user?->name ?: 'System',
+            ])->values(),
+        ]);
+    }
+
+    private function canViewAgreementLogs(): bool
+    {
+        $user = Auth::user();
+
+        if (! $user || ! Schema::hasTable('roles') || ! Schema::hasTable('model_has_roles')) {
+            return false;
+        }
+
+        return $user->isAdmin();
     }
 
     private function bankAccountsForTenant(int $tenantId)
