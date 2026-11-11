@@ -173,6 +173,12 @@ Route::prefix('admin')->middleware('auth')->group(function () {
 
     // Settings
     Route::get('payments/drivers/{driver}', [App\Http\Controllers\Backend\PaymentController::class, 'driver'])->name('payments.driver');
+    Route::get('payments/drivers/{driver}/invoices/export/{format}', [App\Http\Controllers\Backend\PaymentController::class, 'exportInvoices'])
+        ->whereIn('format', ['pdf', 'csv'])
+        ->name('payments.driver.invoices.export');
+    Route::get('payments/drivers/{driver}/payments/export/{format}', [App\Http\Controllers\Backend\PaymentController::class, 'exportPayments'])
+        ->whereIn('format', ['pdf', 'csv'])
+        ->name('payments.driver.payments.export');
     Route::post('payments/drivers/{driver}/refund-credit', [App\Http\Controllers\Backend\PaymentController::class, 'refundCredit'])
         ->name('payments.credit.refund');
     Route::post('payments/drivers/{driver}/apply-credit', [App\Http\Controllers\Backend\PaymentController::class, 'applyCredit'])

@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Support\BatchPaymentInput;
 use App\Services\DriverCreditService;
+use App\Services\DriverStatementExportService;
 use App\Services\DailyFinancialSheetService;
 use App\Services\PaymentAllocationService;
 use App\Services\PaymentIndexService;
@@ -191,6 +192,20 @@ class PaymentController extends Controller
             'canManagePayments',
             'canManageInvoices',
         ));
+    }
+
+    public function exportInvoices(Driver $driver, string $format, DriverStatementExportService $export)
+    {
+        $this->authorizeDriver($driver, Auth::user()->currentTenant());
+
+        return $export->invoices($driver, $format);
+    }
+
+    public function exportPayments(Driver $driver, string $format, DriverStatementExportService $export)
+    {
+        $this->authorizeDriver($driver, Auth::user()->currentTenant());
+
+        return $export->payments($driver, $format);
     }
 
     public function clearOutstanding(Driver $driver, PaymentAllocationService $paymentAllocationService)

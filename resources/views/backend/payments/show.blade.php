@@ -115,7 +115,13 @@
 
                     <div class="tab-content pt-2">
                         <div class="tab-pane active" id="all-invoices" role="tabpanel">
-                            <h5>Total Invoices: £{{ number_format($invoices->sum('total_amount'), 2) }}</h5>
+                            <div class="d-flex justify-content-between align-items-center flex-wrap mb-1">
+                                <h5 class="mb-0">Total Invoices: £{{ number_format($invoices->sum('total_amount'), 2) }}</h5>
+                                <div>
+                                    <a href="{{ route('payments.driver.invoices.export', [$driver, 'pdf']) }}" class="btn btn-outline-danger btn-sm">Export PDF</a>
+                                    <a href="{{ route('payments.driver.invoices.export', [$driver, 'csv']) }}" class="btn btn-outline-secondary btn-sm">Export CSV</a>
+                                </div>
+                            </div>
                             @include('backend.payments.partials.invoices-table', ['invoices' => $invoices, 'canManageInvoices' => $canManageInvoices ?? false])
                         </div>
 
@@ -130,7 +136,13 @@
                         </div>
 
                         <div class="tab-pane" id="payments" role="tabpanel">
-                            <h5>Total Payments: £{{ number_format($payments->sum('amount'), 2) }}</h5>
+                            <div class="d-flex justify-content-between align-items-center flex-wrap mb-1">
+                                <h5 class="mb-0">Total Payments: £{{ number_format($payments->sum('amount'), 2) }}</h5>
+                                <div>
+                                    <a href="{{ route('payments.driver.payments.export', [$driver, 'pdf']) }}" class="btn btn-outline-danger btn-sm">Export PDF</a>
+                                    <a href="{{ route('payments.driver.payments.export', [$driver, 'csv']) }}" class="btn btn-outline-secondary btn-sm">Export CSV</a>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-bordered table-striped">
                                     <thead>
