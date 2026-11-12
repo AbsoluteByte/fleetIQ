@@ -74,6 +74,16 @@
             </div>
 
             <div class="form-group">
+                <label for="agreementsFilterEsign">E-sign</label>
+                <select id="agreementsFilterEsign" class="form-control agreements-advanced-filter" data-filter-key="esign">
+                    <option value="">All</option>
+                    <option value="signed">E-signed</option>
+                    <option value="unsigned">Not signed</option>
+                </select>
+                <small class="text-muted">Active, Swap, and Replacement Vehicle only.</small>
+            </div>
+
+            <div class="form-group">
                 <label>Rented between (start date)</label>
                 <div class="row">
                     <div class="col-6">
@@ -283,6 +293,7 @@
         $(document).ready(function () {
             const filters = {
                 status: '',
+                esign: '',
                 hasNotice: false,
                 rented: { from: '', to: '' },
                 closed: { from: '', to: '' },
@@ -298,6 +309,7 @@
 
             function syncFiltersFromForm() {
                 filters.status = document.getElementById('agreementsFilterStatus').value;
+                filters.esign = document.getElementById('agreementsFilterEsign').value;
                 filters.hasNotice = document.getElementById('agreementsHasNotice').checked;
                 filters.rented.from = document.getElementById('agreementsRentedFrom').value;
                 filters.rented.to = document.getElementById('agreementsRentedTo').value;
@@ -317,6 +329,7 @@
 
                 return {
                     filter_status: filters.status,
+                    filter_esign: filters.esign,
                     filter_has_notice: filters.hasNotice ? 1 : 0,
                     filter_rented_from: filters.rented.from,
                     filter_rented_to: filters.rented.to,
@@ -441,6 +454,10 @@
 
                 if (filters.status) {
                     lines.push('Status: ' + selectedOptionText('agreementsFilterStatus'));
+                }
+
+                if (filters.esign) {
+                    lines.push('E-sign: ' + selectedOptionText('agreementsFilterEsign'));
                 }
 
                 const rentedLine = formatDateRangeLine('Rented between', filters.rented);
@@ -663,7 +680,7 @@
                 setFilterPanelOpen(false);
             });
 
-            $('#agreementsFilterStatus, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
+            $('#agreementsFilterStatus, #agreementsFilterEsign, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
                 dataTable.ajax.reload();
             });
 
@@ -673,6 +690,7 @@
 
             $('#agreementsFilterReset').on('click', function () {
                 $('#agreementsFilterStatus').val('');
+                $('#agreementsFilterEsign').val('');
                 $('#agreementsFilterRefundStatus').val('');
                 $('#agreementsHasNotice').prop('checked', false);
                 $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsExpiredFrom, #agreementsExpiredTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');

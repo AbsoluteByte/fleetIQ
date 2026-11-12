@@ -9,9 +9,13 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class AgreementIndexService
 {
+    /** @var list<string> */
+    private const LIVE_ESIGN_STATUSES = ['Active', 'Swap', 'Replacement Vehicle'];
+
     /**
      * @return list<string>
      */
@@ -46,6 +50,8 @@ class AgreementIndexService
         if ($status = trim((string) $request->input('filter_status'))) {
             $query->whereHas('status', fn (Builder $inner) => $inner->where('name', $status));
         }
+
+        $this->applyEsignFilter($query, trim((string) $request->input('filter_esign')));
 
         if ($request->boolean('filter_has_notice')) {
             $query->whereHas('status', fn (Builder $inner) => $inner->whereIn('name', ['Active', 'Swap']))
@@ -114,6 +120,52 @@ class AgreementIndexService
         }
 
         return $query;
+    }
+
+    private function applyEsignFilter(Builder $query, string $filter): void
+    {
+        if (! in_array($filter, ['signed', 'unsigned'], true)) {
+            return;
+        }
+
+        $query->whereHas('status', fn (Builder $inner) => $inner->whereIn('name', self::LIVE_ESIGN_STATUSES));
+
+        if ($filter === 'signed') {
+            $query->where(function (Builder $inner) {
+                $inner->where('hellosign_status', 'signed');
+                $this->orWhereSignedToken($inner);
+            });
+
+            return;
+        }
+
+        $query->where(function (Builder $inner) {
+            $inner->whereNull('hellosign_status')
+                ->orWhere('hellosign_status', '!=', 'signed');
+        });
+        $this->whereDoesntHaveSignedToken($query);
+    }
+
+    private function orWhereSignedToken(Builder $query): void
+    {
+        if (! Schema::hasTable('agreement_signature_tokens')) {
+            return;
+        }
+
+        $query->orWhereHas('signatureTokens', function (Builder $tokens) {
+            $tokens->where('status', 'signed')->whereNotNull('signature_data');
+        });
+    }
+
+    private function whereDoesntHaveSignedToken(Builder $query): void
+    {
+        if (! Schema::hasTable('agreement_signature_tokens')) {
+            return;
+        }
+
+        $query->whereDoesntHave('signatureTokens', function (Builder $tokens) {
+            $tokens->where('status', 'signed')->whereNotNull('signature_data');
+        });
     }
 
     public function applySearchKeyword(Builder $query, string $keyword): Builder
