@@ -313,7 +313,7 @@
             @include('backend.agreements._company_owner_signature_pdf')
         </td>
         <td>
-            <div class="sig-line"></div>
+            <div class="sig-line" style="line-height:38px; text-align:center;">{{ $documentDate }}</div>
             <div class="sig-label">Date</div>
         </td>
     </tr>
@@ -391,7 +391,7 @@
                 </td>
                 <td style="width:45%; vertical-align:bottom;">
                     <strong>DATE:</strong>
-                    <span style="border-bottom:1px solid #000; display:inline-block; width:68%; height:28px;"></span>
+                    <span style="border-bottom:1px solid #000; display:inline-block; width:68%; height:28px; text-align:center; line-height:28px;">{{ $documentDate }}</span>
                 </td>
             </tr>
         </table>

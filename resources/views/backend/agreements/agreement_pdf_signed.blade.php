@@ -193,7 +193,7 @@
             </div>
             <div class="sig-label">Client</div>
             @if(isset($signature_image) && $signature_image)
-                <div class="sig-info">{{ $driver->full_name }} | {{ now()->format('d/m/Y H:i') }}</div>
+                <div class="sig-info">{{ $driver->full_name }} | {{ $documentSignedAt }}</div>
             @endif
         </td>
         <td>
@@ -202,7 +202,7 @@
         <td>
             <div class="sig-container">
                 @if(isset($signature_image) && $signature_image)
-                    <div style="position:absolute; bottom:4px; width:100%; text-align:center; font-size:10.5px;">{{ now()->format('d/m/Y') }}</div>
+                    <div style="position:absolute; bottom:4px; width:100%; text-align:center; font-size:10.5px;">{{ $documentDate }}</div>
                 @endif
                 <div class="sig-underline"></div>
             </div>
@@ -212,7 +212,7 @@
 </table>
 
 <div style="text-align:center; margin-top:12px; font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px;">
-    <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Signed: {{ now()->format('d/m/Y H:i:s') }}
+    <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Signed: {{ $documentSignedAtExact }}
 </div>
 
 {{-- ================================================================
@@ -286,7 +286,7 @@
                         @endif
                         <div style="border-bottom:1px solid #000; width:100%;"></div>
                         @if(isset($signature_image) && $signature_image)
-                            <div style="font-size:8px; color:#555; margin-top:2px;">{{ $driver->full_name }} | {{ now()->format('d/m/Y H:i') }}</div>
+                            <div style="font-size:8px; color:#555; margin-top:2px;">{{ $driver->full_name }} | {{ $documentSignedAt }}</div>
                         @endif
                     </div>
                 </td>
@@ -294,7 +294,7 @@
                     <strong>DATE:</strong>
                     <div style="display:inline-block; width:68%; vertical-align:bottom;">
                         @if(isset($signature_image) && $signature_image)
-                            <div style="font-size:10.5px; padding-bottom:1px;">{{ now()->format('d/m/Y') }}</div>
+                            <div style="font-size:10.5px; padding-bottom:1px;">{{ $documentDate }}</div>
                         @endif
                         <div style="border-bottom:1px solid #000; width:100%;"></div>
                     </div>
@@ -304,7 +304,7 @@
     </div>
 
     <div style="text-align:center; margin-top:14px; font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px;">
-        <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Statement of Understanding | {{ now()->format('d/m/Y H:i:s') }}
+        <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Statement of Understanding | {{ $documentSignedAtExact }}
     </div>
 </div>
 
@@ -361,13 +361,13 @@
             <div style="border-bottom:1px solid #000; width:100%; margin-bottom:4px;"></div>
             <strong>CLIENT SIGNATURE</strong>
             @if(isset($signature_image) && $signature_image)
-                <div style="font-size:8px; color:#555; margin-top:3px;">{{ $driver->full_name }} | {{ now()->format('d/m/Y H:i') }}</div>
+                <div style="font-size:8px; color:#555; margin-top:3px;">{{ $driver->full_name }} | {{ $documentSignedAt }}</div>
             @endif
         </div>
     </div>
 
     <div style="text-align:center; margin-top:20px; font-size:9px; color:#666; border-top:1px solid #ddd; padding-top:6px;">
-        <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Statement of Liability | {{ now()->format('d/m/Y H:i:s') }}
+        <strong>Electronically Signed</strong> | Agreement ID: {{ $agreement->id }} | Statement of Liability | {{ $documentSignedAtExact }}
     </div>
 </div>
 

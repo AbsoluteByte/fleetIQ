@@ -28,7 +28,10 @@ class AgreementPdfService
             'upgradedFromAgreement.car',
         ]);
 
-        $signatureImage = $agreement->signedSignatureToken()?->signature_data;
+        $signedToken = $agreement->signedSignatureToken();
+        $signatureImage = $signedToken?->signature_data;
+        $signedAt = $signedToken?->signed_at ?? $agreement->esign_completed_at;
+        $documentMoment = $signedAt ? Carbon::parse($signedAt) : Carbon::now();
         $documentCompany = $agreement->documentCompany();
         $letterMeta = $documentCompany
             ? app(PermissionLetterService::class)->resolveLetterMeta($documentCompany)
@@ -40,6 +43,9 @@ class AgreementPdfService
             'car' => $agreement->car,
             'company' => $documentCompany,
             'currentDate' => Carbon::now()->format('d/m/Y'),
+            'documentDate' => $documentMoment->format('d/m/Y'),
+            'documentSignedAt' => $documentMoment->format('d/m/Y H:i'),
+            'documentSignedAtExact' => $documentMoment->format('d/m/Y H:i:s'),
             'previousVehicleRegistration' => $agreement->previousVehicleRegistration(),
             'signature_image' => $signatureImage,
             'letterMeta' => $letterMeta,

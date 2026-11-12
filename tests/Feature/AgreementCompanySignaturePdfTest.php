@@ -122,6 +122,41 @@ class AgreementCompanySignaturePdfTest extends TestCase
         $this->assertStringContainsString('Company Director', $html);
     }
 
+    public function test_signed_agreement_pdf_uses_the_signature_date(): void
+    {
+        $agreement = $this->createAgreementForCompany('Samore Traders Ltd');
+        DB::table('agreement_signature_tokens')->insert([
+            'agreement_id' => $agreement->id,
+            'token' => 'signed-token-date',
+            'signer_email' => 'sig-driver@example.com',
+            'signer_name' => 'Sig Driver',
+            'status' => 'signed',
+            'signature_data' => self::SIGNATURE_PNG,
+            'signed_at' => '2026-03-03 14:30:00',
+            'expires_at' => '2026-09-01 00:00:00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $data = app(AgreementPdfService::class)->agreementPdfViewData($agreement);
+        $html = View::make('backend.agreements.agreement_pdf_signed', $data)->render();
+
+        $this->assertStringContainsString('03/03/2026', $html);
+        $this->assertStringContainsString('03/03/2026 14:30', $html);
+        $this->assertStringContainsString('03/03/2026 14:30:00', $html);
+        $this->assertStringNotContainsString('19/08/2026', $html);
+    }
+
+    public function test_unsigned_agreement_pdf_shows_today_on_the_date_line(): void
+    {
+        $agreement = $this->createAgreementForCompany('Samore Traders Ltd');
+        $data = app(AgreementPdfService::class)->agreementPdfViewData($agreement);
+        $html = View::make('backend.agreements.agreement_pdf', $data)->render();
+
+        $this->assertStringContainsString('19/08/2026', $html);
+        $this->assertSame('19/08/2026', $data['documentDate']);
+    }
+
     public function test_signed_agreement_pdf_html_includes_both_client_and_company_signatures(): void
     {
         $agreement = $this->createAgreementForCompany('Samore Traders Ltd');
