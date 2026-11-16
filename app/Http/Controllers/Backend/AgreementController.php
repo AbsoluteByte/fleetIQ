@@ -84,8 +84,9 @@ class AgreementController extends Controller
 
         $bankAccounts = $this->bankAccountsForTenant($tenant->id);
         $filterStatuses = $indexService->filterStatusNames($tenant->id);
+        $filterCompanies = $indexService->filterCompanies($tenant->id);
 
-        return view($this->dir.'index', compact('bankAccounts', 'filterStatuses'));
+        return view($this->dir.'index', compact('bankAccounts', 'filterStatuses', 'filterCompanies'));
     }
 
     public function depositSettlementPreview(
