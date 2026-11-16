@@ -2,6 +2,7 @@
 @section('content')
     @php
         $filterStatuses = $filterStatuses ?? [];
+        $filterCompanies = $filterCompanies ?? [];
     @endphp
     <section id="basic-datatable">
         <div class="row">
@@ -81,6 +82,25 @@
                     <option value="unsigned">Not signed</option>
                 </select>
                 <small class="text-muted">Active, Swap, and Replacement Vehicle only.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="agreementsFilterInsurance">Insurance</label>
+                <select id="agreementsFilterInsurance" class="form-control agreements-advanced-filter" data-filter-key="insurance">
+                    <option value="">All</option>
+                    <option value="client">Client's</option>
+                    <option value="company">Company's</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="agreementsFilterCompany">Company</label>
+                <select id="agreementsFilterCompany" class="form-control agreements-advanced-filter" data-filter-key="company">
+                    <option value="">All</option>
+                    @foreach($filterCompanies as $company)
+                        <option value="{{ $company['id'] }}">{{ $company['name'] }}</option>
+                    @endforeach
+                </select>
             </div>
 
             <div class="form-group">
@@ -294,6 +314,8 @@
             const filters = {
                 status: '',
                 esign: '',
+                insurance: '',
+                company: '',
                 hasNotice: false,
                 rented: { from: '', to: '' },
                 closed: { from: '', to: '' },
@@ -310,6 +332,8 @@
             function syncFiltersFromForm() {
                 filters.status = document.getElementById('agreementsFilterStatus').value;
                 filters.esign = document.getElementById('agreementsFilterEsign').value;
+                filters.insurance = document.getElementById('agreementsFilterInsurance').value;
+                filters.company = document.getElementById('agreementsFilterCompany').value;
                 filters.hasNotice = document.getElementById('agreementsHasNotice').checked;
                 filters.rented.from = document.getElementById('agreementsRentedFrom').value;
                 filters.rented.to = document.getElementById('agreementsRentedTo').value;
@@ -330,6 +354,8 @@
                 return {
                     filter_status: filters.status,
                     filter_esign: filters.esign,
+                    filter_insurance: filters.insurance,
+                    filter_company: filters.company,
                     filter_has_notice: filters.hasNotice ? 1 : 0,
                     filter_rented_from: filters.rented.from,
                     filter_rented_to: filters.rented.to,
@@ -458,6 +484,14 @@
 
                 if (filters.esign) {
                     lines.push('E-sign: ' + selectedOptionText('agreementsFilterEsign'));
+                }
+
+                if (filters.insurance) {
+                    lines.push('Insurance: ' + selectedOptionText('agreementsFilterInsurance'));
+                }
+
+                if (filters.company) {
+                    lines.push('Company: ' + selectedOptionText('agreementsFilterCompany'));
                 }
 
                 const rentedLine = formatDateRangeLine('Rented between', filters.rented);
@@ -680,7 +714,7 @@
                 setFilterPanelOpen(false);
             });
 
-            $('#agreementsFilterStatus, #agreementsFilterEsign, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
+            $('#agreementsFilterStatus, #agreementsFilterEsign, #agreementsFilterInsurance, #agreementsFilterCompany, #agreementsHasNotice, #agreementsFilterRefundStatus').on('change', function () {
                 dataTable.ajax.reload();
             });
 
@@ -691,6 +725,8 @@
             $('#agreementsFilterReset').on('click', function () {
                 $('#agreementsFilterStatus').val('');
                 $('#agreementsFilterEsign').val('');
+                $('#agreementsFilterInsurance').val('');
+                $('#agreementsFilterCompany').val('');
                 $('#agreementsFilterRefundStatus').val('');
                 $('#agreementsHasNotice').prop('checked', false);
                 $('#agreementsRentedFrom, #agreementsRentedTo, #agreementsClosedFrom, #agreementsClosedTo, #agreementsExpiredFrom, #agreementsExpiredTo, #agreementsNoticeFrom, #agreementsNoticeTo, #agreementsDueFrom, #agreementsDueTo').val('');

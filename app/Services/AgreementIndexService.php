@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agreement;
+use App\Models\Company;
 use App\Models\DepositRefund;
 use App\Models\Status;
 use Carbon\Carbon;
@@ -29,6 +30,23 @@ class AgreementIndexService
             ->all();
     }
 
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    public function filterCompanies(int $tenantId): array
+    {
+        return Company::query()
+            ->where('tenant_id', $tenantId)
+            ->whereHas('agreements', fn (Builder $query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Company $company) => [
+                'id' => (int) $company->id,
+                'name' => (string) $company->name,
+            ])
+            ->all();
+    }
+
     public function baseQuery(int $tenantId): Builder
     {
         return Agreement::query()
@@ -52,6 +70,11 @@ class AgreementIndexService
         }
 
         $this->applyEsignFilter($query, trim((string) $request->input('filter_esign')));
+        $this->applyInsuranceFilter($query, trim((string) $request->input('filter_insurance')));
+
+        if ($companyId = (int) $request->input('filter_company')) {
+            $query->where('company_id', $companyId);
+        }
 
         if ($request->boolean('filter_has_notice')) {
             $query->whereHas('status', fn (Builder $inner) => $inner->whereIn('name', ['Active', 'Swap']))
@@ -120,6 +143,22 @@ class AgreementIndexService
         }
 
         return $query;
+    }
+
+    private function applyInsuranceFilter(Builder $query, string $filter): void
+    {
+        if ($filter === 'client') {
+            $query->where('using_own_insurance', true);
+
+            return;
+        }
+
+        if ($filter === 'company') {
+            $query->where(function (Builder $inner) {
+                $inner->where('using_own_insurance', false)
+                    ->orWhereNull('using_own_insurance');
+            });
+        }
     }
 
     private function applyEsignFilter(Builder $query, string $filter): void
