@@ -19,6 +19,7 @@ use App\Models\Counsel;
 use App\Models\Driver;
 use App\Models\InsuranceProvider;
 use App\Models\Status;
+use App\Services\CarActivityLogger;
 use App\Services\CarInsuranceFleetNotificationService;
 use App\Services\PhvlArchiveService;
 use App\Services\V5DocumentAuthorizationService;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -106,8 +108,9 @@ class CarController extends Controller
         $statuses = Status::where('type', 'insurance')->get();
 
         $canDeleteV5Documents = $this->canDeleteV5DocumentsForCurrentUser();
+        $canCancelCarInsurance = $this->canCancelCarInsurance();
 
-        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses', 'canDeleteV5Documents'));
+        return view($this->dir.'create', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses', 'canDeleteV5Documents', 'canCancelCarInsurance'));
     }
 
     // ✅ Updated Store
@@ -342,6 +345,8 @@ class CarController extends Controller
                 return $car;
             });
 
+            app(CarActivityLogger::class)->created($car);
+
             return $this->withInsuranceEmailNotice(
                 redirect()->route($this->url.'index')->with('success', 'Car added successfully.')
             );
@@ -463,8 +468,24 @@ class CarController extends Controller
         $statuses = Status::where('type', 'insurance')->get();
 
         $canDeleteV5Documents = $this->canDeleteV5DocumentsForCurrentUser();
+        $canCancelCarInsurance = $this->canCancelCarInsurance();
+        $canViewCarLogs = $this->canViewCarLogs() && Schema::hasTable('car_activity_logs');
+        $carActivityLogs = $canViewCarLogs
+            ? $model->activityLogs()->with('user')->get()
+            : collect();
 
-        return view($this->dir.'edit', compact('model', 'companies', 'carModels', 'counsels', 'insuranceProviders', 'statuses', 'canDeleteV5Documents'));
+        return view($this->dir.'edit', compact(
+            'model',
+            'companies',
+            'carModels',
+            'counsels',
+            'insuranceProviders',
+            'statuses',
+            'canDeleteV5Documents',
+            'canCancelCarInsurance',
+            'canViewCarLogs',
+            'carActivityLogs'
+        ));
     }
 
     // ✅ Updated Update
@@ -630,8 +651,19 @@ class CarController extends Controller
                 ]);
             }
         }
+        if (
+            $request->has('has_insurance')
+            && $currentInsuranceStatusName === 'active'
+            && in_array((int) $validated['insurance_status_id'], $this->insuranceCancelledStatusIds(), true)
+            && ! $this->canCancelCarInsurance()
+        ) {
+            throw ValidationException::withMessages([
+                'insurance_status_id' => 'Only Jawad can remove a car from insurance.',
+            ]);
+        }
 
         $this->validateMotPhvDocuments($request, $car);
+        $activityBefore = app(CarActivityLogger::class)->snapshot($car);
 
         try {
             $updatedCar = DB::transaction(function () use ($validated, $request, $car, $tenant, $latestInsuranceBeforeUpdate) {
@@ -852,6 +884,8 @@ class CarController extends Controller
                 return $car;
             });
 
+            app(CarActivityLogger::class)->updated($updatedCar, $activityBefore);
+
             return $this->withInsuranceEmailNotice(
                 redirect()->route($this->url.'edit', $updatedCar)->with('success', 'Car updated successfully.')
             );
@@ -882,6 +916,7 @@ class CarController extends Controller
             $registration = $car->registration;
 
             DB::transaction(function () use ($car) {
+                app(CarActivityLogger::class)->record($car, 'deleted', 'deleted the car.');
                 $car->load(['mots', 'phvs', 'insurances', 'services']);
                 $this->deleteCarFiles($car);
                 $car->mots()->delete();
@@ -1164,6 +1199,22 @@ class CarController extends Controller
     private function canDeleteV5DocumentsForCurrentUser(): bool
     {
         return app(V5DocumentAuthorizationService::class)->canDeleteV5Documents();
+    }
+
+    private function canCancelCarInsurance(): bool
+    {
+        return strtolower(trim((string) Auth::user()?->email)) === V5DocumentAuthorizationService::V5_DELETE_ALLOWED_EMAIL;
+    }
+
+    private function canViewCarLogs(): bool
+    {
+        $user = Auth::user();
+
+        if (! $user || ! Schema::hasTable('roles') || ! Schema::hasTable('model_has_roles')) {
+            return false;
+        }
+
+        return $user->isAdmin();
     }
 
     public function statusReport(string $status)

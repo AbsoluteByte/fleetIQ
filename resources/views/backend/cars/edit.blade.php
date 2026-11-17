@@ -87,8 +87,15 @@
                             Edit {{ $singular }}
                             ({{ $model->car_reg ?? $model->registration }})
                         </h4>
-                        <a class="btn btn-primary float-right" href="{{ route($url . 'index') }}"><i
-                                class="fa fa-arrow-circle-left"></i> Back</a>
+                        <div class="float-right">
+                            @if(!empty($canViewCarLogs))
+                                <button type="button" class="btn btn-outline-dark" data-toggle="modal" data-target="#carActivityLogsModal">
+                                    <i class="fa fa-history"></i> View logs
+                                </button>
+                            @endif
+                            <a class="btn btn-primary" href="{{ route($url . 'index') }}"><i
+                                    class="fa fa-arrow-circle-left"></i> Back</a>
+                        </div>
                     </div>
                     <div class="card-content">
                         <div class="card-body">
@@ -115,6 +122,7 @@
         </div>
     </section>
     @include('backend.cars.partials.insurance-email-notice-modal')
+    @include('backend.cars.partials.activity-logs-modal')
 @endsection
 
 @if($model->isFleetStatusLockedForEditing())

@@ -1736,6 +1736,7 @@
     $defaultHasInsurance = isset($model) && $model->id
         ? (isset($latestInsuranceForForm) && $latestInsuranceForForm !== null)
         : false;
+    $canCancelCarInsurance = $canCancelCarInsurance ?? false;
     $hasInsuranceChecked = (bool) old('has_insurance', $defaultHasInsurance);
     $hasExistingInsuranceDocument = (bool) ($latestInsuranceForForm && $latestInsuranceForForm->insurance_document);
 @endphp
@@ -1798,7 +1799,7 @@
                                         <option value="{{ $status->id }}"
                                             data-status-name="{{ strtolower($status->name) }}"
                                             {{ strtolower($status->name) === 'applied' && $latestInsuranceStatusName === 'active' ? 'disabled' : '' }}
-                                            {{ in_array(strtolower($status->name), ['cancelled', 'canceled'], true) && $latestInsuranceStatusName !== 'active' ? 'disabled' : '' }}
+                                            {{ in_array(strtolower($status->name), ['cancelled', 'canceled'], true) && ($latestInsuranceStatusName !== 'active' || ! $canCancelCarInsurance) ? 'disabled' : '' }}
                                             {{ (old('insurance_status_id') ?? ($latestInsuranceForForm ? $latestInsuranceForForm->status_id : '')) == $status->id ? 'selected' : '' }}>
                                             {{ $status->name }}
                                         </option>

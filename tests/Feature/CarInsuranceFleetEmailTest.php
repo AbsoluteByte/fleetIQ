@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Mail\CarInsuranceFleetChangeMail;
 use App\Models\Car;
+use App\Models\CarActivityLog;
 use App\Models\CarInsurance;
 use App\Models\Company;
 use App\Models\Status;
@@ -116,6 +117,7 @@ class CarInsuranceFleetEmailTest extends TestCase
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('car_activity_logs');
         Schema::dropIfExists('car_status_histories');
         Schema::dropIfExists('car_services');
         Schema::dropIfExists('car_sorn_histories');
@@ -178,6 +180,10 @@ class CarInsuranceFleetEmailTest extends TestCase
     public function test_update_active_to_cancelled_sends_remove_email(): void
     {
         Mail::fake();
+        $this->user->forceFill([
+            'name' => 'Jawad Samore',
+            'email' => 'jawad@samoretraders.com',
+        ])->save();
         $car = $this->createCar($this->samoreCompany->id, 'SAM123');
         $this->createActiveInsurance($car);
 
@@ -201,6 +207,62 @@ class CarInsuranceFleetEmailTest extends TestCase
                 && str_contains($mail->subjectLine, 'Request to Remove Vehicles from Fleet Insurance Policy POL-SAM-001 '.$car->registration)
                 && str_contains($mail->bodyText, 'remove the following vehicle');
         });
+
+        $log = CarActivityLog::query()->where('car_id', $car->id)->where('action', 'updated')->first();
+        $this->assertNotNull($log);
+        $this->assertSame(
+            'Jawad Samore updated the car and changed the insurance status from Active to Cancelled.',
+            $log->summary
+        );
+    }
+
+    public function test_non_jawad_cannot_remove_a_car_from_insurance(): void
+    {
+        Mail::fake();
+        $car = $this->createCar($this->samoreCompany->id, 'SAM124');
+        $insurance = $this->createActiveInsurance($car);
+
+        $response = $this->from(route('cars.edit', $car))
+            ->put(route('cars.update', $car), $this->baseUpdatePayload($car, [
+                'has_insurance' => 1,
+                'insurance_provider_id' => $this->samoreProviderId,
+                'insurance_status_id' => $this->cancelledInsuranceStatusId,
+                'insurance_canceled_date' => now()->toDateString(),
+            ]));
+
+        $response->assertRedirect(route('cars.edit', $car));
+        $response->assertSessionHasErrors('insurance_status_id');
+        $this->assertSame($this->activeInsuranceStatusId, (int) $insurance->fresh()->status_id);
+        Mail::assertNothingSent();
+        $this->assertNull(CarActivityLog::query()->where('car_id', $car->id)->where('action', 'updated')->first());
+    }
+
+    public function test_only_admins_see_car_activity_logs_on_the_edit_page(): void
+    {
+        $car = $this->createCar($this->samoreCompany->id, 'SAM125');
+
+        $staff = $this->get(route('cars.edit', $car));
+        $staff->assertOk();
+        $staff->assertDontSee('View logs', false);
+
+        $roleId = DB::table('roles')->insertGetId([
+            'name' => 'admin',
+            'guard_name' => 'web',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('model_has_roles')->insert([
+            'role_id' => $roleId,
+            'model_type' => \App\Models\User::class,
+            'model_id' => $this->user->id,
+        ]);
+        $this->user->unsetRelation('roles');
+        $this->actingAs($this->user->fresh());
+
+        $admin = $this->get(route('cars.edit', $car));
+        $admin->assertOk();
+        $admin->assertSee('View logs', false);
+        $admin->assertSee('id="carActivityLogsModal"', false);
     }
 
     public function test_resaving_applied_insurance_does_not_resend_email(): void
@@ -641,6 +703,16 @@ class CarInsuranceFleetEmailTest extends TestCase
         Schema::create('car_services', function (Blueprint $table) {
             $table->id();
             $table->foreignId('car_id');
+            $table->timestamps();
+        });
+
+        Schema::create('car_activity_logs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('car_id')->index();
+            $table->foreignId('user_id')->nullable();
+            $table->string('action', 40);
+            $table->text('summary');
+            $table->json('changes')->nullable();
             $table->timestamps();
         });
 
