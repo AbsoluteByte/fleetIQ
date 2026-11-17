@@ -97,6 +97,11 @@ class Car extends Model
         return $this->hasMany(Agreement::class);
     }
 
+    public function activityLogs()
+    {
+        return $this->hasMany(CarActivityLog::class)->latest();
+    }
+
     public function terminationNoticeAgreement(): ?Agreement
     {
         return $this->agreements
